@@ -5,14 +5,18 @@ import {
   deleteDoc,
   doc,
   serverTimestamp,
-  Timestamp,
+  setDoc,
   updateDoc
 } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import type { LuminaEvent, Member, Song } from "../types/models";
+import type { LuminaEvent, Member } from "../types/models";
 import { Header } from "../components/Header";
 
-type AdminSection = "dashboard" | "members" | "events" | "songs";
+const roleLabels = [
+  ["membre", "Membre"],
+  ["contributeur", "Contributeur"],
+  ["admin", "Admin"]
+] as const;
 
 function makeInviteCode() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -23,519 +27,413 @@ function makeInviteCode() {
   return code;
 }
 
+type MemberForm = {
+  id?: string;
+  prenom: string;
+  nom: string;
+  pupitre: string;
+  role: string;
+  uid?: string;
+  claimed?: boolean;
+};
+
 export function AdminScreen({
   members,
   events,
-  songs,
   onBack
 }: {
   members: Member[];
   events: LuminaEvent[];
-  songs: Song[];
   onBack: () => void;
 }) {
-  const [section, setSection] = useState<AdminSection>("dashboard");
+  const [showPresence, setShowPresence] = useState(false);
+  const [form, setForm] = useState<MemberForm | null>(null);
+  const [deleting, setDeleting] = useState<Member | null>(null);
+  const [revealedCode, setRevealedCode] = useState<{ title: string; code: string } | null>(null);
   const [notice, setNotice] = useState("");
 
-  const [memberForm, setMemberForm] = useState({
-    prenom: "",
-    nom: "",
-    pupitre: "Soprano",
-    role: "membre",
-    inviteCode: makeInviteCode()
-  });
-
-  const [eventForm, setEventForm] = useState({
-    titre: "",
-    type: "répétition",
-    date: "",
-    time: "15:00",
-    lieu: "",
-    description: ""
-  });
-
-  const [songForm, setSongForm] = useState({
-    titre: "",
-    compositeur: "",
-    partitionUrl: "",
-    youtubeUrl: "",
-    soprano: "",
-    alto: "",
-    tenor: "",
-    basse: "",
-    appris: false
-  });
-
-  const upcomingEvents = useMemo(
-    () =>
-      events
-        .filter((e) => e.date?.toDate && e.date.toDate().getTime() >= Date.now())
-        .slice(0, 8),
-    [events]
+  const sortedMembers = useMemo(
+    () => [...members].sort((a, b) =>
+      `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`, "fr")
+    ),
+    [members]
   );
 
-  async function createMember(e: React.FormEvent) {
-    e.preventDefault();
-    setNotice("");
-    await addDoc(collection(db, "members"), {
-      prenom: memberForm.prenom.trim(),
-      nom: memberForm.nom.trim(),
-      pupitre: memberForm.pupitre,
-      role: memberForm.role,
-      inviteCode: memberForm.inviteCode.trim().toUpperCase(),
-      claimed: false,
-      uid: "",
-      email: "",
-      createdAt: serverTimestamp()
-    });
-    setNotice(`Membre ajouté. Code d'invitation : ${memberForm.inviteCode}`);
-    setMemberForm({
+  function openNewMember() {
+    setForm({
       prenom: "",
       nom: "",
-      pupitre: "Soprano",
-      role: "membre",
-      inviteCode: makeInviteCode()
+      pupitre: "",
+      role: "membre"
     });
   }
 
-  async function createEvent(e: React.FormEvent) {
-    e.preventDefault();
+  function openEditMember(member: Member) {
+    setForm({
+      id: member.id,
+      prenom: member.prenom,
+      nom: member.nom,
+      pupitre: member.pupitre || "",
+      role: member.role || "membre",
+      uid: member.uid,
+      claimed: member.claimed
+    });
+  }
+
+  async function saveMember() {
+    if (!form || !form.prenom.trim() || !form.nom.trim()) return;
+
     setNotice("");
-    const localDate = new Date(`${eventForm.date}T${eventForm.time}`);
-    if (Number.isNaN(localDate.getTime())) {
-      setNotice("Date ou heure invalide.");
+
+    if (!form.id) {
+      const inviteCode = makeInviteCode();
+
+      await addDoc(collection(db, "members"), {
+        prenom: form.prenom.trim(),
+        nom: form.nom.trim(),
+        pupitre: form.pupitre.trim(),
+        role: form.role,
+        inviteCode,
+        claimed: false,
+        uid: "",
+        email: "",
+        createdAt: serverTimestamp()
+      });
+
+      setForm(null);
+      setRevealedCode({
+        title: "Choriste ajouté !",
+        code: inviteCode
+      });
       return;
     }
 
-    await addDoc(collection(db, "events"), {
-      titre: eventForm.titre.trim(),
-      type: eventForm.type,
-      date: Timestamp.fromDate(localDate),
-      lieu: eventForm.lieu.trim(),
-      description: eventForm.description.trim(),
-      reponses: {},
-      cancelled: false,
-      createdAt: serverTimestamp()
+    await updateDoc(doc(db, "members", form.id), {
+      prenom: form.prenom.trim(),
+      nom: form.nom.trim(),
+      pupitre: form.pupitre.trim(),
+      role: form.role
     });
 
-    setNotice("Événement créé.");
-    setEventForm({
-      titre: "",
-      type: "répétition",
-      date: "",
-      time: "15:00",
-      lieu: "",
-      description: ""
+    if (form.uid) {
+      await setDoc(doc(db, "userRoles", form.uid), {
+        role: form.role
+      });
+    }
+
+    setForm(null);
+    setNotice("Choriste modifié.");
+  }
+
+  async function regenerateCode(memberId: string) {
+    const code = makeInviteCode();
+
+    await updateDoc(doc(db, "members", memberId), {
+      inviteCode: code,
+      claimed: false
+    });
+
+    setRevealedCode({
+      title: "Nouveau code généré",
+      code
     });
   }
 
-  async function toggleEventCancelled(event: LuminaEvent) {
-    await updateDoc(doc(db, "events", event.id), {
-      cancelled: !event.cancelled
-    });
-    setNotice(event.cancelled ? "Événement réactivé." : "Événement annulé.");
+  async function removeMember() {
+    if (!deleting) return;
+
+    await deleteDoc(doc(db, "members", deleting.id));
+
+    if (deleting.uid) {
+      await deleteDoc(doc(db, "userRoles", deleting.uid));
+    }
+
+    setDeleting(null);
+    setNotice("Choriste supprimé.");
   }
 
-  async function removeEvent(event: LuminaEvent) {
-    if (!window.confirm(`Supprimer définitivement « ${event.titre} » ?`)) return;
-    await deleteDoc(doc(db, "events", event.id));
-    setNotice("Événement supprimé.");
-  }
-
-  async function createSong(e: React.FormEvent) {
-    e.preventDefault();
-    setNotice("");
-
-    const audioUrlsByPupitre: Record<string, string> = {};
-    if (songForm.soprano.trim()) audioUrlsByPupitre.soprano = songForm.soprano.trim();
-    if (songForm.alto.trim()) audioUrlsByPupitre.alto = songForm.alto.trim();
-    if (songForm.tenor.trim()) audioUrlsByPupitre.tenor = songForm.tenor.trim();
-    if (songForm.basse.trim()) audioUrlsByPupitre.basse = songForm.basse.trim();
-
-    await addDoc(collection(db, "songs"), {
-      titre: songForm.titre.trim(),
-      compositeur: songForm.compositeur.trim(),
-      partitionUrl: songForm.partitionUrl.trim(),
-      youtubeUrl: songForm.youtubeUrl.trim(),
-      audioUrlsByPupitre,
-      appris: songForm.appris,
-      createdAt: serverTimestamp()
-    });
-
-    setNotice("Chant ajouté à la bibliothèque.");
-    setSongForm({
-      titre: "",
-      compositeur: "",
-      partitionUrl: "",
-      youtubeUrl: "",
-      soprano: "",
-      alto: "",
-      tenor: "",
-      basse: "",
-      appris: false
-    });
-  }
-
-  async function removeSong(song: Song) {
-    if (!window.confirm(`Supprimer définitivement « ${song.titre} » ?`)) return;
-    await deleteDoc(doc(db, "songs", song.id));
-    setNotice("Chant supprimé.");
+  async function copyCode(code: string) {
+    await navigator.clipboard.writeText(code);
+    setNotice("Code copié.");
   }
 
   return (
     <>
       <Header title="Administration" />
-      <section className="screen admin-screen">
-        <button type="button" className="admin-back-button" onClick={onBack}>
+
+      <section className="screen android-admin-screen">
+        <button type="button" className="android-admin-back" onClick={onBack}>
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="m15 18-6-6 6-6" />
           </svg>
-          Retour au profil
+          Retour
         </button>
-        <div className="admin-hero">
-          <div>
-            <span className="admin-kicker">ESPACE ADMINISTRATEUR</span>
-            <h1>Pilotage du Chœur</h1>
-            <p>Membres, invitations, agenda et bibliothèque musicale.</p>
-          </div>
-          <span className="admin-shield">✦</span>
-        </div>
 
-        <div className="admin-section-tabs">
-          {[
-            ["dashboard", "Vue d'ensemble"],
-            ["members", "Membres"],
-            ["events", "Agenda"],
-            ["songs", "Chants"]
-          ].map(([id, label]) => (
-            <button
-              key={id}
-              className={section === id ? "active" : ""}
-              onClick={() => {
-                setSection(id as AdminSection);
-                setNotice("");
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <button
+          type="button"
+          className="presence-overview-button"
+          onClick={() => setShowPresence(true)}
+        >
+          Voir les réponses aux présences
+        </button>
+
+        <p className="member-count">
+          {sortedMembers.length} choriste(s) enregistré(s)
+        </p>
 
         {notice && <p className="admin-notice">{notice}</p>}
 
-        {section === "dashboard" && (
-          <>
-            <div className="admin-stats">
-              <article>
-                <strong>{members.length}</strong>
-                <span>Membres</span>
-              </article>
-              <article>
-                <strong>{members.filter((m) => m.claimed).length}</strong>
-                <span>Comptes activés</span>
-              </article>
-              <article>
-                <strong>{upcomingEvents.length}</strong>
-                <span>Événements à venir</span>
-              </article>
-              <article>
-                <strong>{songs.length}</strong>
-                <span>Chants</span>
-              </article>
+        <div className="android-member-list">
+          {sortedMembers.length === 0 ? (
+            <p className="admin-empty">Aucun choriste pour l'instant.</p>
+          ) : (
+            sortedMembers.map((member) => {
+              const roleLabel =
+                roleLabels.find(([value]) => value === member.role)?.[1] ||
+                member.role ||
+                "Membre";
+
+              return (
+                <article className="android-member-card" key={member.id}>
+                  <div className="member-card-top">
+                    <div>
+                      <h3>{member.prenom} {member.nom}</h3>
+                      <p>{member.pupitre || "-"} · {roleLabel}</p>
+                    </div>
+
+                    <div className="member-card-actions">
+                      <button
+                        type="button"
+                        aria-label="Modifier"
+                        onClick={() => openEditMember(member)}
+                      >
+                        <svg viewBox="0 0 24 24">
+                          <path d="M4 20h4l11-11-4-4L4 16v4Z" />
+                          <path d="m13.5 6.5 4 4" />
+                        </svg>
+                      </button>
+
+                      <button
+                        type="button"
+                        aria-label="Supprimer"
+                        onClick={() => setDeleting(member)}
+                      >
+                        <svg viewBox="0 0 24 24">
+                          <path d="M4 7h16" />
+                          <path d="M9 7V4h6v3" />
+                          <path d="M7 7l1 13h8l1-13" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+
+                  {member.claimed ? (
+                    <span className="member-account-active">✓ Compte actif</span>
+                  ) : (
+                    <div className="pending-code-row">
+                      <span>En attente · Code : {member.inviteCode || "—"}</span>
+                      {member.inviteCode && (
+                        <button
+                          type="button"
+                          aria-label="Copier le code"
+                          onClick={() => copyCode(member.inviteCode || "")}
+                        >
+                          <svg viewBox="0 0 24 24">
+                            <rect x="9" y="9" width="10" height="10" rx="2" />
+                            <path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </article>
+              );
+            })
+          )}
+        </div>
+
+        <button
+          type="button"
+          className="admin-fab"
+          aria-label="Ajouter un choriste"
+          onClick={openNewMember}
+        >
+          +
+        </button>
+      </section>
+
+      {showPresence && (
+        <div className="modal-backdrop" onClick={() => setShowPresence(false)}>
+          <div className="admin-modal presence-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Réponses aux présences</h2>
+
+            <div className="presence-events-list">
+              {events.map((event) => (
+                <article className="presence-event-card" key={event.id}>
+                  <h3>{event.titre}</h3>
+                  <p>
+                    {event.date?.toDate
+                      ? event.date.toDate().toLocaleDateString("fr-FR")
+                      : "Date à préciser"}
+                  </p>
+
+                  <div className="presence-member-lines">
+                    {sortedMembers
+                      .filter((member) => Boolean(member.uid))
+                      .map((member) => {
+                        const response = event.reponses?.[member.uid];
+                        const label =
+                          response === "present"
+                            ? "Présent"
+                            : response === "absent"
+                              ? "Absent"
+                              : response === "peut-etre"
+                                ? "Peut-être"
+                                : "Pas de réponse";
+
+                        return (
+                          <div key={member.id}>
+                            <span>{member.prenom} {member.nom}</span>
+                            <strong className={`presence-label ${response || "none"}`}>
+                              {label}
+                            </strong>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </article>
+              ))}
             </div>
 
-            <article className="card admin-card">
-              <h2>Invitations en attente</h2>
-              {members.filter((m) => !m.claimed).length === 0 ? (
-                <p>Aucune invitation en attente.</p>
-              ) : (
-                <div className="admin-list">
-                  {members
-                    .filter((m) => !m.claimed)
-                    .map((m) => (
-                      <div className="admin-list-row" key={m.id}>
-                        <div>
-                          <strong>{m.prenom} {m.nom}</strong>
-                          <small>{m.pupitre}</small>
-                        </div>
-                        <code>{(m as Member & { inviteCode?: string }).inviteCode || "—"}</code>
-                      </div>
-                    ))}
-                </div>
-              )}
-            </article>
-          </>
-        )}
+            <button
+              type="button"
+              className="modal-close-button"
+              onClick={() => setShowPresence(false)}
+            >
+              Fermer
+            </button>
+          </div>
+        </div>
+      )}
 
-        {section === "members" && (
-          <>
-            <article className="card admin-card">
-              <h2>Ajouter un choriste</h2>
-              <form className="admin-form" onSubmit={createMember}>
-                <div className="admin-two-cols">
-                  <input
-                    placeholder="Prénom"
-                    value={memberForm.prenom}
-                    onChange={(e) => setMemberForm({ ...memberForm, prenom: e.target.value })}
-                    required
-                  />
-                  <input
-                    placeholder="Nom"
-                    value={memberForm.nom}
-                    onChange={(e) => setMemberForm({ ...memberForm, nom: e.target.value })}
-                    required
-                  />
-                </div>
+      {form && (
+        <div className="modal-backdrop" onClick={() => setForm(null)}>
+          <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>{form.id ? "Modifier le choriste" : "Nouveau choriste"}</h2>
 
-                <div className="admin-two-cols">
-                  <select
-                    value={memberForm.pupitre}
-                    onChange={(e) => setMemberForm({ ...memberForm, pupitre: e.target.value })}
-                  >
-                    <option>Soprano</option>
-                    <option>Alto</option>
-                    <option>Ténor</option>
-                    <option>Basse</option>
-                  </select>
-                  <select
-                    value={memberForm.role}
-                    onChange={(e) => setMemberForm({ ...memberForm, role: e.target.value })}
-                  >
-                    <option value="membre">Membre</option>
-                    <option value="contributeur">Contributeur</option>
-                    <option value="admin">Administrateur</option>
-                  </select>
-                </div>
-
-                <label className="admin-code-field">
-                  Code d'invitation
-                  <div>
-                    <input
-                      value={memberForm.inviteCode}
-                      onChange={(e) =>
-                        setMemberForm({
-                          ...memberForm,
-                          inviteCode: e.target.value.toUpperCase()
-                        })
-                      }
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setMemberForm({ ...memberForm, inviteCode: makeInviteCode() })
-                      }
-                    >
-                      Générer
-                    </button>
-                  </div>
-                </label>
-
-                <button className="admin-primary" type="submit">
-                  Ajouter le choriste
-                </button>
-              </form>
-            </article>
-
-            <article className="card admin-card">
-              <h2>Liste des membres</h2>
-              <div className="admin-list">
-                {members.map((m) => (
-                  <div className="admin-list-row" key={m.id}>
-                    <div>
-                      <strong>{m.prenom} {m.nom}</strong>
-                      <small>{m.pupitre} · {m.role || "membre"}</small>
-                    </div>
-                    <span className={m.claimed ? "admin-status ok" : "admin-status pending"}>
-                      {m.claimed ? "Actif" : "Invitation"}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </article>
-          </>
-        )}
-
-        {section === "events" && (
-          <>
-            <article className="card admin-card">
-              <h2>Créer un événement</h2>
-              <form className="admin-form" onSubmit={createEvent}>
+            <div className="admin-dialog-form">
+              <label>
+                Prénom
                 <input
-                  placeholder="Titre de l'événement"
-                  value={eventForm.titre}
-                  onChange={(e) => setEventForm({ ...eventForm, titre: e.target.value })}
-                  required
+                  value={form.prenom}
+                  onChange={(e) => setForm({ ...form, prenom: e.target.value })}
                 />
+              </label>
 
+              <label>
+                Nom
+                <input
+                  value={form.nom}
+                  onChange={(e) => setForm({ ...form, nom: e.target.value })}
+                />
+              </label>
+
+              <label>
+                Pupitre (ex : Ténor)
+                <input
+                  value={form.pupitre}
+                  onChange={(e) => setForm({ ...form, pupitre: e.target.value })}
+                />
+              </label>
+
+              <label>
+                Rôle
                 <select
-                  value={eventForm.type}
-                  onChange={(e) => setEventForm({ ...eventForm, type: e.target.value })}
+                  value={form.role}
+                  onChange={(e) => setForm({ ...form, role: e.target.value })}
                 >
-                  <option value="répétition">Répétition</option>
-                  <option value="messe">Messe</option>
-                  <option value="concert">Concert</option>
-                  <option value="réunion">Réunion</option>
-                  <option value="autre">Autre</option>
+                  {roleLabels.map(([value, label]) => (
+                    <option value={value} key={value}>{label}</option>
+                  ))}
                 </select>
+              </label>
 
-                <div className="admin-two-cols">
-                  <input
-                    type="date"
-                    value={eventForm.date}
-                    onChange={(e) => setEventForm({ ...eventForm, date: e.target.value })}
-                    required
-                  />
-                  <input
-                    type="time"
-                    value={eventForm.time}
-                    onChange={(e) => setEventForm({ ...eventForm, time: e.target.value })}
-                    required
-                  />
-                </div>
-
-                <input
-                  placeholder="Lieu"
-                  value={eventForm.lieu}
-                  onChange={(e) => setEventForm({ ...eventForm, lieu: e.target.value })}
-                />
-
-                <textarea
-                  placeholder="Description"
-                  rows={3}
-                  value={eventForm.description}
-                  onChange={(e) => setEventForm({ ...eventForm, description: e.target.value })}
-                />
-
-                <button className="admin-primary" type="submit">
-                  Créer l'événement
+              {!form.id ? (
+                <p className="dialog-helper">
+                  Un code d'invitation sera généré automatiquement.
+                </p>
+              ) : !form.claimed ? (
+                <button
+                  type="button"
+                  className="regenerate-code-button"
+                  onClick={() => regenerateCode(form.id!)}
+                >
+                  Régénérer le code d'invitation
                 </button>
-              </form>
-            </article>
+              ) : null}
+            </div>
 
-            <article className="card admin-card">
-              <h2>Gérer l'agenda</h2>
-              <div className="admin-list">
-                {events.map((event) => (
-                  <div className="admin-event-row" key={event.id}>
-                    <div>
-                      <strong>{event.titre}</strong>
-                      <small>
-                        {event.date?.toDate
-                          ? event.date.toDate().toLocaleString("fr-FR", {
-                              day: "2-digit",
-                              month: "short",
-                              year: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit"
-                            })
-                          : "Date non renseignée"}
-                      </small>
-                    </div>
-                    <div className="admin-actions">
-                      <button onClick={() => toggleEventCancelled(event)}>
-                        {event.cancelled ? "Réactiver" : "Annuler"}
-                      </button>
-                      <button className="danger" onClick={() => removeEvent(event)}>
-                        Supprimer
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </article>
-          </>
-        )}
+            <div className="modal-actions">
+              <button type="button" onClick={() => setForm(null)}>
+                Annuler
+              </button>
+              <button
+                type="button"
+                className="primary"
+                disabled={!form.prenom.trim() || !form.nom.trim()}
+                onClick={saveMember}
+              >
+                {form.id ? "Enregistrer" : "Créer"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-        {section === "songs" && (
-          <>
-            <article className="card admin-card">
-              <h2>Ajouter un chant</h2>
-              <form className="admin-form" onSubmit={createSong}>
-                <input
-                  placeholder="Titre du chant"
-                  value={songForm.titre}
-                  onChange={(e) => setSongForm({ ...songForm, titre: e.target.value })}
-                  required
-                />
-                <input
-                  placeholder="Compositeur / auteur"
-                  value={songForm.compositeur}
-                  onChange={(e) => setSongForm({ ...songForm, compositeur: e.target.value })}
-                />
-                <input
-                  placeholder="Lien de la partition"
-                  type="url"
-                  value={songForm.partitionUrl}
-                  onChange={(e) => setSongForm({ ...songForm, partitionUrl: e.target.value })}
-                />
-                <input
-                  placeholder="Lien YouTube"
-                  type="url"
-                  value={songForm.youtubeUrl}
-                  onChange={(e) => setSongForm({ ...songForm, youtubeUrl: e.target.value })}
-                />
+      {deleting && (
+        <div className="modal-backdrop" onClick={() => setDeleting(null)}>
+          <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Supprimer ce choriste ?</h2>
+            <p>
+              La fiche de « {deleting.prenom} {deleting.nom} » sera supprimée.
+              Si son compte était déjà actif, cela ne supprime pas son compte de connexion,
+              seulement ses informations dans l'application.
+            </p>
 
-                <h3>Audios par pupitre</h3>
-                <input
-                  placeholder="Lien audio Soprano"
-                  type="url"
-                  value={songForm.soprano}
-                  onChange={(e) => setSongForm({ ...songForm, soprano: e.target.value })}
-                />
-                <input
-                  placeholder="Lien audio Alto"
-                  type="url"
-                  value={songForm.alto}
-                  onChange={(e) => setSongForm({ ...songForm, alto: e.target.value })}
-                />
-                <input
-                  placeholder="Lien audio Ténor"
-                  type="url"
-                  value={songForm.tenor}
-                  onChange={(e) => setSongForm({ ...songForm, tenor: e.target.value })}
-                />
-                <input
-                  placeholder="Lien audio Basse"
-                  type="url"
-                  value={songForm.basse}
-                  onChange={(e) => setSongForm({ ...songForm, basse: e.target.value })}
-                />
+            <div className="modal-actions">
+              <button type="button" onClick={() => setDeleting(null)}>
+                Annuler
+              </button>
+              <button type="button" className="danger" onClick={removeMember}>
+                Supprimer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-                <label className="admin-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={songForm.appris}
-                    onChange={(e) => setSongForm({ ...songForm, appris: e.target.checked })}
-                  />
-                  Chant déjà appris
-                </label>
+      {revealedCode && (
+        <div className="modal-backdrop" onClick={() => setRevealedCode(null)}>
+          <div className="admin-modal code-reveal-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>{revealedCode.title}</h2>
+            <p>Transmets ce code au choriste pour qu'il crée son compte :</p>
+            <code>{revealedCode.code}</code>
 
-                <button className="admin-primary" type="submit">
-                  Ajouter le chant
-                </button>
-              </form>
-            </article>
-
-            <article className="card admin-card">
-              <h2>Bibliothèque</h2>
-              <div className="admin-list">
-                {songs.map((song) => (
-                  <div className="admin-list-row" key={song.id}>
-                    <div>
-                      <strong>{song.titre}</strong>
-                      <small>{song.compositeur || "Sans auteur renseigné"}</small>
-                    </div>
-                    <button className="admin-delete-small" onClick={() => removeSong(song)}>
-                      Supprimer
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </article>
-          </>
-        )}
-      </section>
+            <div className="modal-actions">
+              <button type="button" onClick={() => setRevealedCode(null)}>
+                Fermer
+              </button>
+              <button
+                type="button"
+                className="primary"
+                onClick={() => copyCode(revealedCode.code)}
+              >
+                Copier
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

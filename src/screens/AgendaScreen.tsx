@@ -5,16 +5,16 @@ import { Header } from "../components/Header";
 
 export function AgendaScreen({
   events,
-  memberId
+  uid
 }: {
   events: LuminaEvent[];
-  memberId: string;
+  uid: string;
 }) {
   async function respond(event: LuminaEvent, response: string) {
-    if (!memberId) return;
+    if (!uid) return;
 
     await updateDoc(doc(db, "events", event.id), {
-      [`reponses.${memberId}`]: response
+      [`reponses.${uid}`]: response
     });
   }
 
@@ -30,9 +30,7 @@ export function AgendaScreen({
         <div className="compact-list">
           {events.map((event) => {
             const date = event.date?.toDate();
-            const myResponse = memberId
-              ? event.reponses?.[memberId]
-              : undefined;
+            const myResponse = uid ? event.reponses?.[uid] : undefined;
 
             return (
               <article
@@ -51,9 +49,7 @@ export function AgendaScreen({
                 <div className="event-main">
                   <div className="event-topline">
                     <span className="event-chip">{event.type}</span>
-                    {event.cancelled && (
-                      <span className="danger-chip">ANNULÉ</span>
-                    )}
+                    {event.cancelled && <span className="danger-chip">ANNULÉ</span>}
                   </div>
 
                   <h3>{event.titre}</h3>
@@ -68,7 +64,6 @@ export function AgendaScreen({
                       ].map(([value, label]) => (
                         <button
                           key={value}
-                          disabled={!memberId}
                           className={myResponse === value ? "selected" : ""}
                           onClick={() => respond(event, value)}
                         >

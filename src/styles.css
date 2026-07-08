@@ -1201,3 +1201,327 @@ input, textarea {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+
+
+/* ===== Administration fidèle à l'organisation Android ===== */
+.android-admin-screen {
+  position: relative;
+  padding-bottom: 120px;
+}
+
+.android-admin-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 14px;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: #203a60;
+  font-weight: 800;
+}
+
+.android-admin-back svg {
+  width: 21px;
+  height: 21px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.presence-overview-button {
+  width: 100%;
+  min-height: 48px;
+  border: 1.5px solid #9ba8b9;
+  border-radius: 14px;
+  background: white;
+  color: #1d3557;
+  font-weight: 800;
+  font-size: .96rem;
+}
+
+.member-count {
+  margin: 14px 2px 16px;
+  color: #758197;
+  font-size: .82rem;
+}
+
+.android-member-list {
+  display: grid;
+  gap: 12px;
+}
+
+.android-member-card {
+  padding: 16px;
+  border-radius: 18px;
+  background: white;
+  border: 1px solid #e6eaf0;
+  box-shadow: 0 7px 20px rgba(20, 40, 70, .055);
+}
+
+.member-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.member-card-top h3 {
+  margin: 0 0 4px;
+  color: #172640;
+  font-size: 1rem;
+}
+
+.member-card-top p {
+  margin: 0;
+  color: #78859a;
+  font-size: .79rem;
+}
+
+.member-card-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.member-card-actions button,
+.pending-code-row button {
+  width: 34px;
+  height: 34px;
+  padding: 7px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #425675;
+}
+
+.member-card-actions svg,
+.pending-code-row svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.member-account-active {
+  display: block;
+  margin-top: 11px;
+  color: #3e7050;
+  font-size: .76rem;
+  font-weight: 800;
+}
+
+.pending-code-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 9px;
+  margin-top: 8px;
+  color: #7b6840;
+  font-size: .76rem;
+  font-weight: 700;
+}
+
+.admin-fab {
+  position: fixed;
+  right: max(22px, calc((100vw - 780px) / 2 + 22px));
+  bottom: 92px;
+  width: 58px;
+  height: 58px;
+  border: 0;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #d7c68d, #c8b273);
+  color: #24314a;
+  font-size: 2rem;
+  line-height: 1;
+  box-shadow: 0 12px 28px rgba(24, 42, 72, .22);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(5, 16, 34, .58);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.admin-modal {
+  width: min(500px, 100%);
+  max-height: min(86dvh, 720px);
+  overflow: auto;
+  padding: 22px;
+  border-radius: 24px;
+  background: white;
+  color: #17233a;
+  box-shadow: 0 24px 80px rgba(0,0,0,.24);
+}
+
+.admin-modal h2 {
+  margin: 0 0 16px;
+  color: #14294b;
+}
+
+.admin-dialog-form {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-dialog-form label {
+  display: grid;
+  gap: 6px;
+  color: #5e6a7d;
+  font-size: .8rem;
+  font-weight: 750;
+}
+
+.admin-dialog-form input,
+.admin-dialog-form select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 13px;
+  border: 1.5px solid #dbe1e9;
+  border-radius: 13px;
+  background: #fafbfd;
+  color: #17233a;
+  font: inherit;
+}
+
+.dialog-helper {
+  margin: 2px 0 0;
+  color: #7c8798;
+  font-size: .77rem;
+}
+
+.regenerate-code-button {
+  justify-self: start;
+  border: 0;
+  background: transparent;
+  color: #234b7d;
+  padding: 5px 0;
+  font-weight: 800;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  margin-top: 20px;
+}
+
+.modal-actions button,
+.modal-close-button {
+  min-height: 42px;
+  padding: 0 15px;
+  border: 0;
+  border-radius: 12px;
+  background: #edf1f5;
+  color: #30445f;
+  font-weight: 800;
+}
+
+.modal-actions button.primary {
+  background: #173c70;
+  color: white;
+}
+
+.modal-actions button.danger {
+  background: #fff0f0;
+  color: #9b3232;
+}
+
+.modal-actions button:disabled {
+  opacity: .45;
+}
+
+.code-reveal-modal code {
+  display: block;
+  margin: 16px 0;
+  padding: 16px;
+  border-radius: 14px;
+  background: #f1f4f8;
+  color: #173b6d;
+  font-size: 1.45rem;
+  font-weight: 900;
+  letter-spacing: .06em;
+  text-align: center;
+}
+
+.presence-modal {
+  width: min(620px, 100%);
+}
+
+.presence-events-list {
+  display: grid;
+  gap: 12px;
+  max-height: 56dvh;
+  overflow: auto;
+}
+
+.presence-event-card {
+  padding: 14px;
+  border: 1px solid #e1e6ed;
+  border-radius: 16px;
+  background: #fafbfd;
+}
+
+.presence-event-card h3 {
+  margin: 0 0 4px;
+  color: #172b4c;
+}
+
+.presence-event-card > p {
+  margin: 0 0 10px;
+  color: #7c8798;
+  font-size: .78rem;
+}
+
+.presence-member-lines {
+  display: grid;
+  gap: 7px;
+}
+
+.presence-member-lines > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: .82rem;
+}
+
+.presence-label {
+  white-space: nowrap;
+}
+
+.presence-label.present { color: #34734a; }
+.presence-label.absent { color: #9b3e3e; }
+.presence-label.peut-etre { color: #8a6a1f; }
+.presence-label.none { color: #8a94a4; }
+
+.modal-close-button {
+  width: 100%;
+  margin-top: 16px;
+}
+
+.admin-empty {
+  padding: 26px 16px;
+  text-align: center;
+  color: #7a879a;
+}
+
+@media (max-width: 520px) {
+  .admin-modal {
+    padding: 19px;
+    border-radius: 20px;
+  }
+
+  .admin-fab {
+    right: 18px;
+    bottom: 88px;
+  }
+}

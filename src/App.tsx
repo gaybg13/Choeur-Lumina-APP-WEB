@@ -107,7 +107,7 @@ export default function App() {
       content = <SongsScreen songs={songs} />;
       break;
     case "agenda":
-      content = <AgendaScreen events={allEvents} memberId={member?.id || ""} />;
+      content = <AgendaScreen events={allEvents} uid={user.uid} />;
       break;
     case "messages":
       content = <MessagesScreen uid={user.uid} member={member} />;
@@ -117,7 +117,7 @@ export default function App() {
       break;
     case "admin":
       content = member?.role === "admin"
-        ? <AdminScreen members={members} events={events} songs={songs} onBack={() => setTab("profile")} />
+        ? <AdminScreen members={members} events={events} onBack={() => setTab("profile")} />
         : <HomeScreen member={member} nextEvent={nextEvent} songs={songs} onOpen={setTab} />;
       break;
     case "profile":
