@@ -17,6 +17,7 @@ import { SongsScreen } from "./screens/SongsScreen";
 import { MessagesScreen } from "./screens/MessagesScreen";
 import { MembersScreen } from "./screens/MembersScreen";
 import { ProfileScreen } from "./screens/ProfileScreen";
+import { AdminScreen } from "./screens/AdminScreen";
 import { BottomNav, type Tab } from "./components/BottomNav";
 
 function nextBirthdayEvent(member: Member): LuminaEvent | null {
@@ -114,6 +115,11 @@ export default function App() {
     case "members":
       content = <MembersScreen members={members} />;
       break;
+    case "admin":
+      content = member?.role === "admin"
+        ? <AdminScreen members={members} events={events} songs={songs} />
+        : <HomeScreen member={member} nextEvent={nextEvent} songs={songs} onOpen={setTab} />;
+      break;
     case "profile":
       content = (
         <ProfileScreen
@@ -141,6 +147,7 @@ export default function App() {
         onChange={setTab}
         messageUnread={false}
         agendaUnread={false}
+        isAdmin={member?.role === "admin"}
       />
     </div>
   );

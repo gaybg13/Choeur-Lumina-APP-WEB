@@ -1,6 +1,13 @@
-export type Tab = "home" | "songs" | "agenda" | "messages" | "members" | "profile";
+export type Tab =
+  | "home"
+  | "songs"
+  | "agenda"
+  | "messages"
+  | "members"
+  | "admin"
+  | "profile";
 
-const items: Array<{ id: Tab; label: string; icon: string }> = [
+const baseItems: Array<{ id: Tab; label: string; icon: string }> = [
   { id: "home", label: "Accueil", icon: "⌂" },
   { id: "songs", label: "Chants", icon: "♫" },
   { id: "agenda", label: "Agenda", icon: "▣" },
@@ -13,19 +20,30 @@ export function BottomNav({
   active,
   onChange,
   messageUnread,
-  agendaUnread
+  agendaUnread,
+  isAdmin
 }: {
   active: Tab;
   onChange: (tab: Tab) => void;
   messageUnread: boolean;
   agendaUnread: boolean;
+  isAdmin: boolean;
 }) {
+  const items = isAdmin
+    ? [
+        ...baseItems.slice(0, 5),
+        { id: "admin" as Tab, label: "Admin", icon: "⚙" },
+        baseItems[5]
+      ]
+    : baseItems;
+
   return (
     <nav className="bottom-nav">
       {items.map((item) => {
         const badge =
           (item.id === "messages" && messageUnread) ||
           (item.id === "agenda" && agendaUnread);
+
         return (
           <button
             key={item.id}

@@ -10,6 +10,7 @@ export type Member = {
   role: string;
   photoUrl?: string;
   claimed?: boolean;
+  inviteCode?: string;
   birthdayDay?: number;
   birthdayMonth?: number;
   agendaLastSeenAt?: Timestamp;
