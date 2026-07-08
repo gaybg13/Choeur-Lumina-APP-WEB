@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged, type User } from "firebase/auth";
 import {
   collection,
+  deleteDoc,
   doc,
   getDocs,
   onSnapshot,
@@ -9,6 +10,7 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  Timestamp,
   updateDoc,
   where
 } from "firebase/firestore";
@@ -39,15 +41,58 @@ function initialTabFromUrl(): Tab {
   return allowed.includes(requested as Tab) ? requested as Tab : "home";
 }
 
+function parisDayKey(now = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Paris",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(now);
+}
+
+function startOfTodayInParis(now = new Date()): Date {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Paris",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(now);
+  const values = Object.fromEntries(
+    parts.filter((part) => part.type !== "literal").map((part) => [part.type, Number(part.value)])
+  ) as Record<string, number>;
+
+  const utcGuess = new Date(Date.UTC(values.year, values.month - 1, values.day, 0, 0, 0));
+  const parisParts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Paris",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(utcGuess);
+  const parisValues = Object.fromEntries(
+    parisParts.filter((part) => part.type !== "literal").map((part) => [part.type, Number(part.value)])
+  ) as Record<string, number>;
+  const representedAsUtc = Date.UTC(
+    parisValues.year, parisValues.month - 1, parisValues.day,
+    parisValues.hour, parisValues.minute, parisValues.second
+  );
+  const offsetMs = representedAsUtc - utcGuess.getTime();
+  return new Date(utcGuess.getTime() - offsetMs);
+}
+
 function nextBirthdayEvent(member: Member): LuminaEvent | null {
   const day = member.birthdayDay || 0;
   const month = member.birthdayMonth || 0;
   if (!day || !month) return null;
 
   const now = new Date();
-  let year = now.getFullYear();
+  const todayStart = startOfTodayInParis(now);
+  let year = Number(parisDayKey(now).slice(0, 4));
   let date = new Date(year, month - 1, day, 9, 0, 0, 0);
-  if (date.getTime() < now.getTime()) {
+  if (date.getTime() < todayStart.getTime()) {
     year += 1;
     date = new Date(year, month - 1, day, 9, 0, 0, 0);
   }
@@ -72,6 +117,7 @@ export default function App() {
   const [groupMessages, setGroupMessages] = useState<GroupMessage[]>([]);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [tab, setTab] = useState<Tab>(initialTabFromUrl);
+  const [calendarDayKey, setCalendarDayKey] = useState(() => parisDayKey());
 
   async function loadCurrentMember(uid: string) {
     const snap = await getDocs(query(collection(db, "members"), where("uid", "==", uid)));
@@ -108,6 +154,15 @@ export default function App() {
     };
   }, []);
 
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      const nextKey = parisDayKey();
+      setCalendarDayKey((current) => current === nextKey ? current : nextKey);
+    }, 60_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
   useEffect(() => {
     if (!user) return;
 
@@ -140,9 +195,17 @@ export default function App() {
       if (me) setMember(me);
     });
 
-    const unEvents = onSnapshot(query(collection(db, "events"), orderBy("date", "asc")), (snap) => {
-      setEvents(snap.docs.map((d) => ({ id: d.id, ...d.data() } as LuminaEvent)));
-    });
+    const todayCutoff = Timestamp.fromDate(startOfTodayInParis());
+    const unEvents = onSnapshot(
+      query(
+        collection(db, "events"),
+        where("date", ">=", todayCutoff),
+        orderBy("date", "asc")
+      ),
+      (snap) => {
+        setEvents(snap.docs.map((d) => ({ id: d.id, ...d.data() } as LuminaEvent)));
+      }
+    );
 
     const unSongs = onSnapshot(query(collection(db, "songs"), orderBy("titre", "asc")), (snap) => {
       setSongs(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Song)));
@@ -173,14 +236,37 @@ export default function App() {
       unGroup();
       unConversations();
     };
-  }, [user]);
+  }, [user, calendarDayKey]);
+
+  // Les événements passés ne sont jamais chargés dans l'agenda actif.
+  // Pour le staff, on supprime aussi physiquement les anciens documents,
+  // ce qui supprime en même temps leur map `reponses`.
+  useEffect(() => {
+    const role = member?.role;
+    if (!user || (role !== "admin" && role !== "contributeur")) return;
+
+    const cutoff = Timestamp.fromDate(startOfTodayInParis());
+    void getDocs(query(collection(db, "events"), where("date", "<", cutoff)))
+      .then((snap) => Promise.allSettled(
+        snap.docs.map((eventDoc) => deleteDoc(eventDoc.ref))
+      ))
+      .catch(() => undefined);
+  }, [calendarDayKey, member?.role, user]);
+
+  const activeEvents = useMemo(() => {
+    const cutoffMs = startOfTodayInParis().getTime();
+    return events.filter((event) => {
+      const eventDate = event.date?.toDate?.();
+      return eventDate instanceof Date && eventDate.getTime() >= cutoffMs;
+    });
+  }, [events, calendarDayKey]);
 
   const allEvents = useMemo(() => {
     const birthdays = members.map(nextBirthdayEvent).filter((e): e is LuminaEvent => Boolean(e));
-    return [...events, ...birthdays].sort(
+    return [...activeEvents, ...birthdays].sort(
       (a, b) => (a.date?.toDate().getTime() || 0) - (b.date?.toDate().getTime() || 0)
     );
-  }, [events, members]);
+  }, [activeEvents, members]);
 
   const nextEvent = allEvents.find((e) => (e.date?.toDate().getTime() || 0) >= Date.now()) || null;
   const canEditContent = member?.role === "admin" || member?.role === "contributeur";
@@ -191,7 +277,7 @@ export default function App() {
     ) || conversations.some((conversation) => (conversation.unreadCounts?.[user.uid] || 0) > 0)
   ));
 
-  const agendaUnread = Boolean(member && events.some((event) => {
+  const agendaUnread = Boolean(member && activeEvents.some((event) => {
     const created = event.createdAt?.toDate().getTime() || 0;
     const seen = member.agendaLastSeenAt?.toDate().getTime() || 0;
     return created > seen;
@@ -244,7 +330,7 @@ export default function App() {
       break;
     case "admin":
       content = member?.role === "admin"
-        ? <AdminScreen members={members} events={events} onBack={() => void openTab("profile")} />
+        ? <AdminScreen members={members} events={activeEvents} onBack={() => void openTab("profile")} />
         : <HomeScreen member={member} nextEvent={nextEvent} songs={songs} onOpen={(value) => void openTab(value)} />;
       break;
     case "profile":
