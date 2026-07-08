@@ -1,5 +1,7 @@
 import type { Timestamp } from "firebase/firestore";
 
+export type MemberRole = "membre" | "contributeur" | "admin" | string;
+
 export type Member = {
   id: string;
   uid: string;
@@ -7,10 +9,11 @@ export type Member = {
   nom: string;
   email: string;
   pupitre: string;
-  role: string;
+  role: MemberRole;
   photoUrl?: string;
   claimed?: boolean;
   inviteCode?: string;
+  fcmToken?: string;
   birthdayDay?: number;
   birthdayMonth?: number;
   agendaLastSeenAt?: Timestamp;
@@ -28,6 +31,13 @@ export type LuminaEvent = {
   compteRendu?: string;
   createdAt?: Timestamp;
   cancelled?: boolean;
+  cancelledAt?: Timestamp;
+  synthetic?: boolean;
+};
+
+export type Folder = {
+  id: string;
+  nom: string;
 };
 
 export type Song = {
@@ -36,10 +46,14 @@ export type Song = {
   compositeur?: string;
   partitionUrl?: string;
   partitionType?: string;
+  audioUrl?: string;
+  audioIsFile?: boolean;
   youtubeUrl?: string;
   folderId?: string;
   appris?: boolean;
+  createdAt?: Timestamp;
   audioUrlsByPupitre?: Record<string, string>;
+  audioFilesByPupitre?: Record<string, boolean>;
 };
 
 export type GroupMessage = {
@@ -49,11 +63,46 @@ export type GroupMessage = {
   texte: string;
   type?: string;
   mediaUrl?: string;
+  durationMs?: number;
   timestamp?: Timestamp;
+  editedAt?: Timestamp;
   deleted?: boolean;
   readBy?: string[];
   hiddenFor?: string[];
   reactions?: Record<string, string>;
+  replyToId?: string;
   replyToText?: string;
   replyToAuthor?: string;
+};
+
+export type DirectMessage = {
+  id: string;
+  authorUid: string;
+  texte: string;
+  type?: string;
+  mediaUrl?: string;
+  durationMs?: number;
+  timestamp?: Timestamp;
+  editedAt?: Timestamp;
+  deleted?: boolean;
+  readBy?: string[];
+  deliveredBy?: string[];
+  hiddenFor?: string[];
+  reactions?: Record<string, string>;
+  replyToId?: string;
+  replyToText?: string;
+  replyToAuthor?: string;
+};
+
+export type ConversationSummary = {
+  id: string;
+  participants?: string[];
+  lastMessage?: string;
+  lastTimestamp?: Timestamp;
+  unreadCounts?: Record<string, number>;
+};
+
+export type UserStatus = {
+  online?: boolean;
+  lastSeen?: Timestamp;
 };

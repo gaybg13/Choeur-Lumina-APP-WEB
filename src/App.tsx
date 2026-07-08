@@ -2,14 +2,25 @@ import { useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged, type User } from "firebase/auth";
 import {
   collection,
+  doc,
   getDocs,
   onSnapshot,
   orderBy,
   query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
   where
 } from "firebase/firestore";
 import { auth, db } from "./lib/firebase";
-import type { LuminaEvent, Member, Song } from "./types/models";
+import type {
+  ConversationSummary,
+  Folder,
+  GroupMessage,
+  LuminaEvent,
+  Member,
+  Song
+} from "./types/models";
 import { LoginScreen } from "./screens/LoginScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { AgendaScreen } from "./screens/AgendaScreen";
@@ -37,10 +48,9 @@ function nextBirthdayEvent(member: Member): LuminaEvent | null {
     id: `birthday_${member.id}_${year}`,
     titre: `Anniversaire de ${member.prenom}`,
     type: "anniversaire",
-    date: {
-      toDate: () => date
-    } as LuminaEvent["date"],
-    description: `🎂 Souhaitons un joyeux anniversaire à ${member.prenom} !`
+    date: { toDate: () => date } as LuminaEvent["date"],
+    description: `Souhaitons un joyeux anniversaire à ${member.prenom} !`,
+    synthetic: true
   };
 }
 
@@ -50,6 +60,9 @@ export default function App() {
   const [members, setMembers] = useState<Member[]>([]);
   const [events, setEvents] = useState<LuminaEvent[]>([]);
   const [songs, setSongs] = useState<Song[]>([]);
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [groupMessages, setGroupMessages] = useState<GroupMessage[]>([]);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [tab, setTab] = useState<Tab>("home");
 
   async function loadCurrentMember(uid: string) {
@@ -60,15 +73,48 @@ export default function App() {
 
   useEffect(() => onAuthStateChanged(auth, (next) => {
     setUser(next);
-    if (next) loadCurrentMember(next.uid);
-    else setMember(null);
+    if (next) void loadCurrentMember(next.uid);
+    else {
+      setMember(null);
+      setMembers([]);
+      setEvents([]);
+      setSongs([]);
+      setFolders([]);
+      setGroupMessages([]);
+      setConversations([]);
+    }
   }), []);
 
   useEffect(() => {
     if (!user) return;
 
+    const statusRef = doc(db, "userStatus", user.uid);
+    const publishStatus = (online: boolean) => setDoc(statusRef, {
+      online,
+      lastSeen: serverTimestamp()
+    }, { merge: true }).catch(() => undefined);
+
+    void publishStatus(true);
+    const onVisibility = () => void publishStatus(document.visibilityState === "visible");
+    const onPageHide = () => void publishStatus(false);
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", onPageHide);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", onPageHide);
+      void publishStatus(false);
+    };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+
     const unMembers = onSnapshot(collection(db, "members"), (snap) => {
-      setMembers(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Member)));
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Member));
+      setMembers(list);
+      const me = list.find((m) => m.uid === user.uid);
+      if (me) setMember(me);
     });
 
     const unEvents = onSnapshot(query(collection(db, "events"), orderBy("date", "asc")), (snap) => {
@@ -79,53 +125,107 @@ export default function App() {
       setSongs(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Song)));
     });
 
+    const unFolders = onSnapshot(collection(db, "folders"), (snap) => {
+      setFolders(
+        snap.docs
+          .map((d) => ({ id: d.id, ...d.data() } as Folder))
+          .sort((a, b) => a.nom.localeCompare(b.nom, "fr"))
+      );
+    });
+
+    const unGroup = onSnapshot(query(collection(db, "groupChat"), orderBy("timestamp", "asc")), (snap) => {
+      setGroupMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() } as GroupMessage)));
+    });
+
+    const unConversations = onSnapshot(
+      query(collection(db, "conversations"), where("participants", "array-contains", user.uid)),
+      (snap) => setConversations(snap.docs.map((d) => ({ id: d.id, ...d.data() } as ConversationSummary)))
+    );
+
     return () => {
       unMembers();
       unEvents();
       unSongs();
+      unFolders();
+      unGroup();
+      unConversations();
     };
   }, [user]);
 
   const allEvents = useMemo(() => {
-    const birthdays = members
-      .map(nextBirthdayEvent)
-      .filter((e): e is LuminaEvent => Boolean(e));
-    return [...events, ...birthdays].sort((a, b) =>
-      (a.date?.toDate().getTime() || 0) - (b.date?.toDate().getTime() || 0)
+    const birthdays = members.map(nextBirthdayEvent).filter((e): e is LuminaEvent => Boolean(e));
+    return [...events, ...birthdays].sort(
+      (a, b) => (a.date?.toDate().getTime() || 0) - (b.date?.toDate().getTime() || 0)
     );
   }, [events, members]);
 
-  const nextEvent = allEvents.find((e) =>
-    (e.date?.toDate().getTime() || 0) >= Date.now()
-  ) || null;
+  const nextEvent = allEvents.find((e) => (e.date?.toDate().getTime() || 0) >= Date.now()) || null;
+  const canEditContent = member?.role === "admin" || member?.role === "contributeur";
+
+  const messageUnread = Boolean(user && (
+    groupMessages.some((message) =>
+      message.authorUid !== user.uid && !(message.readBy || []).includes(user.uid)
+    ) || conversations.some((conversation) => (conversation.unreadCounts?.[user.uid] || 0) > 0)
+  ));
+
+  const agendaUnread = Boolean(member && events.some((event) => {
+    const created = event.createdAt?.toDate().getTime() || 0;
+    const seen = member.agendaLastSeenAt?.toDate().getTime() || 0;
+    return created > seen;
+  }));
+
+  async function openTab(nextTab: Tab) {
+    setTab(nextTab);
+    if (nextTab === "agenda" && member) {
+      try {
+        await updateDoc(doc(db, "members", member.id), { agendaLastSeenAt: serverTimestamp() });
+      } catch {
+        // L'agenda reste utilisable même si le marqueur de lecture n'est pas autorisé.
+      }
+    }
+  }
 
   if (!user) return <LoginScreen />;
 
   let content;
   switch (tab) {
     case "songs":
-      content = <SongsScreen songs={songs} />;
+      content = (
+        <SongsScreen
+          songs={songs}
+          folders={folders}
+          canEdit={canEditContent}
+          uid={user.uid}
+        />
+      );
       break;
     case "agenda":
-      content = <AgendaScreen events={allEvents} uid={user.uid} />;
+      content = (
+        <AgendaScreen
+          events={allEvents}
+          uid={user.uid}
+          songs={songs}
+          canEdit={canEditContent}
+        />
+      );
       break;
     case "messages":
-      content = <MessagesScreen uid={user.uid} member={member} />;
+      content = <MessagesScreen uid={user.uid} member={member} members={members} />;
       break;
     case "members":
       content = <MembersScreen members={members} />;
       break;
     case "admin":
       content = member?.role === "admin"
-        ? <AdminScreen members={members} events={events} onBack={() => setTab("profile")} />
-        : <HomeScreen member={member} nextEvent={nextEvent} songs={songs} onOpen={setTab} />;
+        ? <AdminScreen members={members} events={events} onBack={() => void openTab("profile")} />
+        : <HomeScreen member={member} nextEvent={nextEvent} songs={songs} onOpen={(value) => void openTab(value)} />;
       break;
     case "profile":
       content = (
         <ProfileScreen
           member={member}
           onRefresh={() => loadCurrentMember(user.uid)}
-          onOpenAdmin={() => setTab("admin")}
+          onOpenAdmin={() => void openTab("admin")}
         />
       );
       break;
@@ -135,7 +235,7 @@ export default function App() {
           member={member}
           nextEvent={nextEvent}
           songs={songs}
-          onOpen={setTab}
+          onOpen={(value) => void openTab(value)}
         />
       );
   }
@@ -145,9 +245,9 @@ export default function App() {
       <main className="content">{content}</main>
       <BottomNav
         active={tab}
-        onChange={setTab}
-        messageUnread={false}
-        agendaUnread={false}
+        onChange={(value) => void openTab(value)}
+        messageUnread={messageUnread}
+        agendaUnread={agendaUnread}
       />
     </div>
   );

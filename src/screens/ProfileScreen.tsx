@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { signOut } from "firebase/auth";
 import { doc, updateDoc } from "firebase/firestore";
-import { auth, db } from "../lib/firebase";
+import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
+import { auth, db, storage } from "../lib/firebase";
 import { enableNotifications } from "../lib/notifications";
 import { Header } from "../components/Header";
 import type { Member } from "../types/models";
@@ -18,6 +19,8 @@ export function ProfileScreen({
   const [day, setDay] = useState(String(member?.birthdayDay || ""));
   const [month, setMonth] = useState(String(member?.birthdayMonth || ""));
   const [notice, setNotice] = useState("");
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   async function saveBirthday() {
     if (!member) return;
@@ -38,6 +41,25 @@ export function ProfileScreen({
     await onRefresh();
   }
 
+
+  async function uploadPhoto(file: File) {
+    if (!member?.uid) return;
+    setPhotoBusy(true);
+    try {
+      const fileRef = storageRef(storage, `profile_photos/${member.uid}`);
+      await uploadBytes(fileRef, file);
+      const photoUrl = await getDownloadURL(fileRef);
+      await updateDoc(doc(db, "members", member.id), { photoUrl });
+      setNotice("Photo de profil mise à jour.");
+      await onRefresh();
+    } catch (error) {
+      console.error(error);
+      setNotice("Impossible d'envoyer la photo. Vérifie les règles Storage.");
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
   async function notifications() {
     const token = await enableNotifications();
     setNotice(
@@ -52,11 +74,13 @@ export function ProfileScreen({
       <Header title="Profil" />
       <section className="screen">
         <article className="profile-card">
-          <div className="big-avatar">
+          <button className="big-avatar profile-photo-button" type="button" onClick={() => photoInputRef.current?.click()} aria-label="Modifier la photo de profil">
             {member?.photoUrl
               ? <img src={member.photoUrl} alt="" />
               : member?.prenom?.[0]}
-          </div>
+            <span>{photoBusy ? "…" : "✎"}</span>
+          </button>
+          <input ref={photoInputRef} type="file" accept="image/*" hidden onChange={(e) => { const file = e.target.files?.[0]; if (file) void uploadPhoto(file); e.currentTarget.value = ""; }} />
 
           <h2>{member?.prenom} {member?.nom}</h2>
           <span>{member?.pupitre}</span>
