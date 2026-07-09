@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { signOut } from "firebase/auth";
 import { doc, updateDoc } from "firebase/firestore";
 import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
@@ -20,6 +20,7 @@ export function ProfileScreen({
   const [month, setMonth] = useState(String(member?.birthdayMonth || ""));
   const [notice, setNotice] = useState("");
   const [photoBusy, setPhotoBusy] = useState(false);
+  const [cropSource, setCropSource] = useState<string | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
   async function saveBirthday() {
@@ -42,13 +43,14 @@ export function ProfileScreen({
   }
 
 
-  async function uploadPhoto(file: File) {
+  async function uploadPhoto(blob: Blob) {
     if (!member?.uid) return;
     setPhotoBusy(true);
     try {
       const fileRef = storageRef(storage, `profile_photos/${member.uid}`);
-      await uploadBytes(fileRef, file);
-      const photoUrl = await getDownloadURL(fileRef);
+      await uploadBytes(fileRef, blob, { contentType: "image/jpeg" });
+      const downloadUrl = await getDownloadURL(fileRef);
+      const photoUrl = `${downloadUrl}${downloadUrl.includes("?") ? "&" : "?"}v=${Date.now()}`;
       await updateDoc(doc(db, "members", member.id), { photoUrl });
       setNotice("Photo de profil mise à jour.");
       await onRefresh();
@@ -58,6 +60,11 @@ export function ProfileScreen({
     } finally {
       setPhotoBusy(false);
     }
+  }
+
+  function preparePhoto(file: File) {
+    const url = URL.createObjectURL(file);
+    setCropSource(url);
   }
 
   async function notifications() {
@@ -80,7 +87,17 @@ export function ProfileScreen({
               : member?.prenom?.[0]}
             <span>{photoBusy ? "…" : "✎"}</span>
           </button>
-          <input ref={photoInputRef} type="file" accept="image/*" hidden onChange={(e) => { const file = e.target.files?.[0]; if (file) void uploadPhoto(file); e.currentTarget.value = ""; }} />
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) preparePhoto(file);
+              e.currentTarget.value = "";
+            }}
+          />
 
           <h2>{member?.prenom} {member?.nom}</h2>
           <span>{member?.pupitre}</span>
@@ -168,6 +185,160 @@ export function ProfileScreen({
           Se déconnecter
         </button>
       </section>
+
+      {cropSource && (
+        <PhotoCropModal
+          src={cropSource}
+          onCancel={() => {
+            URL.revokeObjectURL(cropSource);
+            setCropSource(null);
+          }}
+          onConfirm={async (blob) => {
+            URL.revokeObjectURL(cropSource);
+            setCropSource(null);
+            await uploadPhoto(blob);
+          }}
+        />
+      )}
     </>
+  );
+}
+
+function PhotoCropModal({
+  src,
+  onCancel,
+  onConfirm
+}: {
+  src: string;
+  onCancel: () => void;
+  onConfirm: (blob: Blob) => Promise<void>;
+}) {
+  const STAGE = 240;
+  const [natural, setNatural] = useState({ width: 1, height: 1 });
+  const [zoom, setZoom] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [saving, setSaving] = useState(false);
+  const dragRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
+
+  const baseScale = Math.max(STAGE / natural.width, STAGE / natural.height);
+  const displayWidth = natural.width * baseScale * zoom;
+  const displayHeight = natural.height * baseScale * zoom;
+
+  function clamp(next: { x: number; y: number }, zoomValue = zoom) {
+    const w = natural.width * baseScale * zoomValue;
+    const h = natural.height * baseScale * zoomValue;
+    const maxX = Math.max(0, (w - STAGE) / 2);
+    const maxY = Math.max(0, (h - STAGE) / 2);
+    return {
+      x: Math.max(-maxX, Math.min(maxX, next.x)),
+      y: Math.max(-maxY, Math.min(maxY, next.y))
+    };
+  }
+
+  useEffect(() => {
+    setOffset((value) => clamp(value, zoom));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoom, natural.width, natural.height]);
+
+  async function createCrop() {
+    const img = new Image();
+    img.src = src;
+    await img.decode();
+
+    const totalScale = baseScale * zoom;
+    const sourceSize = Math.min(STAGE / totalScale, img.naturalWidth, img.naturalHeight);
+    const sx = Math.max(0, Math.min(img.naturalWidth - sourceSize, (img.naturalWidth - sourceSize) / 2 - offset.x / totalScale));
+    const sy = Math.max(0, Math.min(img.naturalHeight - sourceSize, (img.naturalHeight - sourceSize) / 2 - offset.y / totalScale));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas indisponible");
+    ctx.drawImage(img, sx, sy, sourceSize, sourceSize, 0, 0, 512, 512);
+
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((result) => result ? resolve(result) : reject(new Error("Recadrage impossible")), "image/jpeg", 0.92);
+    });
+    return blob;
+  }
+
+  return (
+    <div className="crop-modal-backdrop" role="dialog" aria-modal="true" aria-label="Cadrer la photo de profil">
+      <div className="crop-modal-card">
+        <div className="crop-modal-heading">
+          <div>
+            <span>PHOTO DE PROFIL</span>
+            <h2>Cadrer la photo</h2>
+          </div>
+          <button type="button" onClick={onCancel} aria-label="Fermer">×</button>
+        </div>
+
+        <p>Déplace la photo et ajuste le zoom pour remplir correctement le cercle.</p>
+
+        <div
+          className="crop-stage"
+          style={{ width: STAGE, height: STAGE }}
+          onPointerDown={(event) => {
+            event.currentTarget.setPointerCapture(event.pointerId);
+            dragRef.current = { x: event.clientX, y: event.clientY, ox: offset.x, oy: offset.y };
+          }}
+          onPointerMove={(event) => {
+            if (!dragRef.current) return;
+            const next = {
+              x: dragRef.current.ox + event.clientX - dragRef.current.x,
+              y: dragRef.current.oy + event.clientY - dragRef.current.y
+            };
+            setOffset(clamp(next));
+          }}
+          onPointerUp={() => { dragRef.current = null; }}
+          onPointerCancel={() => { dragRef.current = null; }}
+        >
+          <img
+            src={src}
+            alt="Aperçu du cadrage"
+            draggable={false}
+            onLoad={(event) => setNatural({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })}
+            style={{
+              width: displayWidth,
+              height: displayHeight,
+              left: (STAGE - displayWidth) / 2 + offset.x,
+              top: (STAGE - displayHeight) / 2 + offset.y
+            }}
+          />
+        </div>
+
+        <label className="crop-zoom-control">
+          <span>Zoom</span>
+          <input
+            type="range"
+            min="1"
+            max="3"
+            step="0.01"
+            value={zoom}
+            onChange={(event) => setZoom(Number(event.target.value))}
+          />
+        </label>
+
+        <div className="crop-actions">
+          <button type="button" className="secondary-button" onClick={onCancel} disabled={saving}>Annuler</button>
+          <button
+            type="button"
+            className="primary-button"
+            disabled={saving}
+            onClick={async () => {
+              setSaving(true);
+              try {
+                await onConfirm(await createCrop());
+              } finally {
+                setSaving(false);
+              }
+            }}
+          >
+            {saving ? "Enregistrement…" : "Utiliser cette photo"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
