@@ -386,12 +386,30 @@ export function MessagesScreen({
   }, [privateTarget]);
 
   useEffect(() => {
-    if (privateTarget || !restoredTargetUidRef.current) return;
+    if (!restoredTargetUidRef.current) return;
     const restored = members.find(
       (candidate) => candidate.uid === restoredTargetUidRef.current,
     );
-    if (restored) setPrivateTarget(restored);
+    if (restored && !privateTarget) setPrivateTarget(restored);
   }, [members, privateTarget]);
+
+  // Garde la conversation active synchronisée avec le flux temps réel des membres :
+  // nouvelle photo, changement de nom ou de profil visibles sans fermer la PWA.
+  useEffect(() => {
+    const activeUid = privateTarget?.uid;
+    if (!activeUid) return;
+    const freshMember = members.find((candidate) => candidate.uid === activeUid);
+    if (!freshMember) return;
+    setPrivateTarget((current) => {
+      if (!current || current.uid !== activeUid) return current;
+      const changed =
+        current.photoUrl !== freshMember.photoUrl ||
+        current.prenom !== freshMember.prenom ||
+        current.nom !== freshMember.nom ||
+        current.pupitre !== freshMember.pupitre;
+      return changed ? freshMember : current;
+    });
+  }, [members, privateTarget?.uid]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
