@@ -309,29 +309,21 @@ export function MessagesScreen({
   );
 
   useEffect(() => {
-    // Important : vider immédiatement l'ancien fil avant de brancher le nouveau listener.
-    // Ainsi, une conversation vide ou une erreur Firestore ne peut jamais afficher
-    // les messages du correspondant précédent.
-    setDirectMessages([]);
-    setDirectTyping(false);
-
-    if (!privateTarget) return;
-
+    if (!privateTarget) {
+      setDirectMessages([]);
+      setDirectTyping(false);
+      return;
+    }
     const convId = conversationId(uid, privateTarget.uid);
     const unMessages = onSnapshot(
       query(
         collection(db, "conversations", convId, "messages"),
         orderBy("timestamp", "asc"),
       ),
-      (snap) => {
+      (snap) =>
         setDirectMessages(
           snap.docs.map((d) => ({ id: d.id, ...d.data() }) as DirectMessage),
-        );
-      },
-      (error) => {
-        console.error("Écoute conversation privée impossible", convId, error);
-        setDirectMessages([]);
-      },
+        ),
     );
     const unTyping = onSnapshot(
       doc(db, "conversations", convId, "typing", privateTarget.uid),
@@ -342,13 +334,12 @@ export function MessagesScreen({
         const updated = data?.updatedAt?.toDate().getTime() || 0;
         setDirectTyping(Boolean(data?.isTyping && Date.now() - updated < 6000));
       },
-      () => setDirectTyping(false),
     );
     return () => {
       unMessages();
       unTyping();
     };
-  }, [privateTarget?.uid, uid]);
+  }, [privateTarget, uid]);
 
   useEffect(() => {
     localStorage.setItem("lumina_group_draft", groupText);
@@ -401,25 +392,6 @@ export function MessagesScreen({
     );
     if (restored) setPrivateTarget(restored);
   }, [members, privateTarget]);
-
-  // Synchronise uniquement l'identité/photo du correspondant actif.
-  // La conversation elle-même reste liée à l'identifiant canonique uid1_uid2,
-  // comme dans la version stable V2.5.
-  useEffect(() => {
-    const activeUid = privateTarget?.uid;
-    if (!activeUid) return;
-    const freshMember = members.find((candidate) => candidate.uid === activeUid);
-    if (!freshMember) return;
-    setPrivateTarget((current) => {
-      if (!current || current.uid !== activeUid) return current;
-      const changed =
-        current.photoUrl !== freshMember.photoUrl ||
-        current.prenom !== freshMember.prenom ||
-        current.nom !== freshMember.nom ||
-        current.pupitre !== freshMember.pupitre;
-      return changed ? freshMember : current;
-    });
-  }, [members, privateTarget?.uid]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
