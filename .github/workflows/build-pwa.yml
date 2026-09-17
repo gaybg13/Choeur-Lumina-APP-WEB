@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 jobs:
   build-and-deploy:
@@ -51,3 +52,20 @@ jobs:
           firebaseServiceAccount: "${{ secrets.FIREBASE_SERVICE_ACCOUNT_CHORALE_LUMINA_APP }}"
           channelId: live
           projectId: chorale-lumina-app
+
+      - name: Nettoyer l'historique des workflows
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          KEEP_RUN: ${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --paginate "/repos/$REPO/actions/runs?status=completed&per_page=100" --jq '.workflow_runs[].id' |
+          while read -r run_id; do
+            [ -z "$run_id" ] && continue
+            [ "$run_id" = "$KEEP_RUN" ] && continue
+            echo "Suppression du run $run_id"
+            gh api --method DELETE "/repos/$REPO/actions/runs/$run_id"
+          done
