@@ -1,0 +1,29 @@
+name: Cleanup failed workflow runs
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/cleanup-failed-runs.yml'
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Supprimer les exécutions échouées
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          for status in failure cancelled timed_out action_required startup_failure stale; do
+            gh api --paginate "/repos/$REPO/actions/runs?status=$status&per_page=100" --jq '.workflow_runs[].id' | while read -r run_id; do
+              [ -z "$run_id" ] && continue
+              echo "Suppression du run $run_id ($status)"
+              gh api --method DELETE "/repos/$REPO/actions/runs/$run_id"
+            done
+          done
