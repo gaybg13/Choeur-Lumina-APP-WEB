@@ -32,7 +32,8 @@ export function HomeScreen({
   songs,
   announcements,
   suggestions,
-  onOpen
+  onOpen,
+  onOpenSong
 }: {
   uid: string;
   member: Member | null;
@@ -41,6 +42,7 @@ export function HomeScreen({
   announcements: Announcement[];
   suggestions: AnonymousSuggestion[];
   onOpen: (tab: "songs" | "agenda" | "messages") => void;
+  onOpenSong: (songId: string) => void;
 }) {
   const heroImageSrc = new URL("choeur-lumina-groupe-hero.jpg", document.baseURI).toString();
   const logoSrc = new URL("icons/icon-192.png", document.baseURI).toString();
@@ -228,7 +230,20 @@ export function HomeScreen({
           <h2>Derniers chants ajoutés</h2>
           <div className="home-song-list">
             {songs.slice(0, 3).map((song) => (
-              <div className="home-song-row" key={song.id}>
+              <div
+                className="home-song-row"
+                key={song.id}
+                role="button"
+                tabIndex={0}
+                aria-label={`Ouvrir le chant ${song.titre}`}
+                onClick={() => onOpenSong(song.id)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onOpenSong(song.id);
+                  }
+                }}
+              >
                 <span className="home-song-icon">♫</span>
                 <div>
                   <strong>{song.titre}</strong>
