@@ -3045,3 +3045,122 @@ input, textarea {
 @media (prefers-reduced-motion: reduce) {
   .message-news-ticker span { animation: none; transform: none; }
 }
+
+
+/* Messagerie 2.9 — lecteur vocal type WhatsApp + séparation des jours */
+.message-day-separator {
+  display: flex;
+  justify-content: center;
+  margin: 10px 0 8px;
+  pointer-events: none;
+}
+.message-day-separator span {
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.92);
+  border: 1px solid #e2e6ec;
+  color: #667080;
+  font-size: .68rem;
+  font-weight: 750;
+  box-shadow: 0 2px 8px rgba(19,44,89,.06);
+}
+
+.voice-note-custom {
+  display: grid;
+  grid-template-columns: 38px minmax(120px, 1fr) 42px;
+  align-items: center;
+  gap: 7px;
+  width: min(300px, 100%);
+  min-width: 230px;
+  padding: 3px 0 1px;
+}
+.voice-note-custom audio {
+  display: none;
+}
+.voice-play-button,
+.voice-speed-button {
+  border: 0;
+  cursor: pointer;
+}
+.voice-play-button {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--navy);
+  color: white;
+  font-size: 1rem;
+  font-weight: 900;
+}
+.voice-speed-button {
+  min-width: 42px;
+  height: 30px;
+  border-radius: 999px;
+  padding: 0 7px;
+  background: rgba(19,44,89,.09);
+  color: var(--navy);
+  font-size: .69rem;
+  font-weight: 850;
+}
+.voice-progress-wrap {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+.voice-progress-wrap input[type="range"] {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  accent-color: var(--navy);
+}
+.voice-time-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: #6b7280;
+  font-size: .62rem;
+  line-height: 1;
+}
+.voice-note-custom.has-error {
+  grid-template-columns: 38px minmax(110px, 1fr) auto;
+}
+.voice-note-custom.has-error .voice-play-button {
+  opacity: .5;
+  cursor: not-allowed;
+}
+.voice-fallback-link {
+  grid-column: 2 / -1;
+  justify-self: start;
+  color: var(--navy);
+  font-size: .68rem;
+  font-weight: 750;
+  text-decoration: underline;
+}
+.voice-note-custom.compact {
+  width: min(360px, 100%);
+  flex: 1 1 240px;
+}
+.voice-preview .voice-note-custom {
+  min-width: 220px;
+}
+@media (max-width: 480px) {
+  .voice-note-custom {
+    width: min(255px, 100%);
+    min-width: 205px;
+    grid-template-columns: 36px minmax(105px, 1fr) 39px;
+    gap: 5px;
+  }
+  .voice-play-button {
+    width: 36px;
+    height: 36px;
+  }
+  .voice-speed-button {
+    min-width: 39px;
+    padding: 0 5px;
+  }
+  .voice-preview .voice-note-custom {
+    flex-basis: 100%;
+    width: 100%;
+  }
+}
