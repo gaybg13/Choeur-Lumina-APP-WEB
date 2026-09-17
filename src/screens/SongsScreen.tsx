@@ -85,6 +85,38 @@ function extensionFromUrl(url: string) {
   return match?.[1] || "mp3";
 }
 
+const MUSIC_RECORDING_BITRATE = 192_000;
+
+function highQualityAudioConstraints(): MediaStreamConstraints {
+  return {
+    audio: {
+      channelCount: { ideal: 1 },
+      sampleRate: { ideal: 48_000 },
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false
+    }
+  };
+}
+
+function createHighQualityRecorder(stream: MediaStream, bitrate = MUSIC_RECORDING_BITRATE) {
+  const mimeType = ["audio/webm;codecs=opus", "audio/webm"].find((type) => MediaRecorder.isTypeSupported(type));
+  try {
+    return new MediaRecorder(stream, {
+      ...(mimeType ? { mimeType } : {}),
+      audioBitsPerSecond: bitrate
+    });
+  } catch {
+    return new MediaRecorder(stream);
+  }
+}
+
+function recordedAudioExtension(mimeType: string) {
+  if (mimeType.includes("mp4")) return "m4a";
+  if (mimeType.includes("ogg")) return "ogg";
+  return "webm";
+}
+
 async function saveUrlAsFile(url: string, filename: string) {
   try {
     const response = await fetch(url);
@@ -108,13 +140,17 @@ export function SongsScreen({
   folders,
   categories,
   canEdit,
-  uid
+  uid,
+  initialSongId,
+  onInitialSongOpened
 }: {
   songs: Song[];
   folders: Folder[];
   categories: SongCategory[];
   canEdit: boolean;
   uid: string;
+  initialSongId?: string | null;
+  onInitialSongOpened?: () => void;
 }) {
   const [selectedFolderId, setSelectedFolderId] = useState("");
   const [selectedCategoryId, setSelectedCategoryId] = useState("");
@@ -133,6 +169,20 @@ export function SongsScreen({
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recorderStreamRef = useRef<MediaStream | null>(null);
   const recorderChunksRef = useRef<Blob[]>([]);
+
+  useEffect(() => {
+    if (!initialSongId || !songs.some((song) => song.id === initialSongId)) return;
+    setSelectedFolderId("");
+    setSelectedCategoryId("");
+    setSearch("");
+    setOpenId(initialSongId);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        document.getElementById(`song-${initialSongId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    });
+    onInitialSongOpened?.();
+  }, [initialSongId, songs, onInitialSongOpened]);
 
   const selectedFolder = folders.find((folder) => folder.id === selectedFolderId);
   const visibleSongs = useMemo(() => {
@@ -326,8 +376,8 @@ export function SongsScreen({
       return;
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      const stream = await navigator.mediaDevices.getUserMedia(highQualityAudioConstraints());
+      const recorder = createHighQualityRecorder(stream);
       recorderStreamRef.current = stream;
       recorderRef.current = recorder;
       recorderChunksRef.current = [];
@@ -338,7 +388,7 @@ export function SongsScreen({
         recorderStreamRef.current = null;
         recorderRef.current = null;
         setRecordingVoice(null);
-        void uploadVoiceFile(voice, blob, `enregistrement_${Date.now()}.webm`);
+        void uploadVoiceFile(voice, blob, `enregistrement_${Date.now()}.${recordedAudioExtension(blob.type)}`);
       };
       recorder.start();
       setRecordingVoice(voice);
@@ -426,7 +476,7 @@ export function SongsScreen({
             const isOpen = openId === song.id;
             const labels = (song.categoryIds || []).map((id) => categoryLabel(id, categories));
             return (
-              <article className="song-card song-card-compact" key={song.id}>
+              <article className="song-card song-card-compact" key={song.id} id={`song-${song.id}`}>
                 <button className="song-summary song-summary-button" onClick={() => setOpenId(isOpen ? null : song.id)}>
                   <div className="song-icon-tile">♫</div>
                   <div className="song-summary-copy">
