@@ -3,6 +3,7 @@
     "source": "functions"
   },
   "hosting": {
+    "site": "choeur-lumina",
     "public": "dist",
     "ignore": [
       "firebase.json",
