@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { addDoc, collection, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, serverTimestamp, updateDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import type {
   Announcement,
@@ -26,6 +26,7 @@ function formatEventTime(event: LuminaEvent) {
 }
 
 export function HomeScreen({
+  uid,
   member,
   nextEvent,
   songs,
@@ -33,6 +34,7 @@ export function HomeScreen({
   suggestions,
   onOpen
 }: {
+  uid: string;
   member: Member | null;
   nextEvent: LuminaEvent | null;
   songs: Song[];
@@ -83,6 +85,20 @@ export function HomeScreen({
     }
   }
 
+
+  async function respondToNextEvent(response: "present" | "absent" | "peut-etre") {
+    if (!nextEvent || nextEvent.synthetic || nextEvent.cancelled || nextEvent.type === "anniversaire") return;
+    setBusy(`presence-${response}`);
+    setNotice("");
+    try {
+      await updateDoc(doc(db, "events", nextEvent.id), { [`reponses.${uid}`]: response });
+    } catch (error) {
+      console.error(error);
+      setNotice("Impossible d'enregistrer ta présence.");
+    } finally {
+      setBusy("");
+    }
+  }
   async function removeSuggestion(item: AnonymousSuggestion) {
     if (!window.confirm("Supprimer cette proposition ?")) return;
     setBusy(`suggestion-${item.id}`);
@@ -158,6 +174,24 @@ export function HomeScreen({
                 {formatEventTime(nextEvent) && <span> · {formatEventTime(nextEvent)}</span>}
               </p>
               {nextEvent.lieu && <small>{nextEvent.lieu}</small>}
+              {!nextEvent.synthetic && !nextEvent.cancelled && nextEvent.type !== "anniversaire" && (
+                <div className="presence-actions home-presence-actions">
+                  {([
+                    ["present", "Présent"],
+                    ["absent", "Absent"],
+                    ["peut-etre", "Peut-être"]
+                  ] as const).map(([value, label]) => (
+                    <button
+                      key={value}
+                      className={nextEvent.reponses?.[uid] === value ? "selected" : ""}
+                      disabled={busy.startsWith("presence-")}
+                      onClick={() => void respondToNextEvent(value)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           ) : (
             <p>Aucun événement à venir.</p>

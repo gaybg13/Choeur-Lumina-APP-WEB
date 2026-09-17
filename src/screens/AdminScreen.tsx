@@ -2,11 +2,10 @@ import { useMemo, useState } from "react";
 import {
   addDoc,
   collection,
-  deleteDoc,
   doc,
   serverTimestamp,
-  setDoc,
-  updateDoc
+  updateDoc,
+  writeBatch
 } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import type { LuminaEvent, Member } from "../types/models";
@@ -21,8 +20,8 @@ const roleLabels = [
 
 function makeInviteCode() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let code = "LUM-";
-  for (let i = 0; i < 6; i += 1) {
+  let code = "";
+  for (let i = 0; i < 8; i += 1) {
     code += chars[Math.floor(Math.random() * chars.length)];
   }
   return code;
@@ -135,7 +134,8 @@ export function AdminScreen({
       return;
     }
 
-    await updateDoc(doc(db, "members", form.id), {
+    const batch = writeBatch(db);
+    batch.update(doc(db, "members", form.id), {
       prenom: form.prenom.trim(),
       nom: form.nom.trim(),
       pupitre: form.pupitre.trim(),
@@ -143,11 +143,13 @@ export function AdminScreen({
     });
 
     if (form.uid) {
-      await setDoc(doc(db, "userRoles", form.uid), {
+      batch.set(doc(db, "userRoles", form.uid), {
         role: form.role,
         memberId: form.id
       }, { merge: true });
     }
+
+    await batch.commit();
 
     setForm(null);
     setNotice("Choriste modifié.");
@@ -157,8 +159,7 @@ export function AdminScreen({
     const code = makeInviteCode();
 
     await updateDoc(doc(db, "members", memberId), {
-      inviteCode: code,
-      claimed: false
+      inviteCode: code
     });
 
     setRevealedCode({
@@ -185,11 +186,14 @@ export function AdminScreen({
       return;
     }
 
-    await deleteDoc(doc(db, "members", deleting.id));
+    const batch = writeBatch(db);
+    batch.delete(doc(db, "members", deleting.id));
 
     if (deleting.uid) {
-      await deleteDoc(doc(db, "userRoles", deleting.uid));
+      batch.delete(doc(db, "userRoles", deleting.uid));
     }
+
+    await batch.commit();
 
     setDeleting(null);
     setNotice("Choriste supprimé.");

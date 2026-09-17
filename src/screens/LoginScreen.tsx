@@ -10,9 +10,8 @@ import {
   doc,
   getDocs,
   query,
-  setDoc,
-  updateDoc,
-  where
+  where,
+  writeBatch
 } from "firebase/firestore";
 import { auth, db } from "../lib/firebase";
 
@@ -78,15 +77,19 @@ export function LoginScreen() {
       const memberDoc = snap.docs[0];
       const role = memberDoc.data().role || "membre";
 
-      await updateDoc(memberDoc.ref, {
+      const batch = writeBatch(db);
+      batch.update(memberDoc.ref, {
         uid: authResult.user.uid,
         claimed: true,
         email: email.trim(),
         birthdayDay: day,
         birthdayMonth: month
       });
-
-      await setDoc(doc(db, "userRoles", authResult.user.uid), { role });
+      batch.set(doc(db, "userRoles", authResult.user.uid), {
+        role,
+        memberId: memberDoc.id
+      });
+      await batch.commit();
     } catch (err) {
       if (auth.currentUser) {
         try {

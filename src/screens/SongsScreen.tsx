@@ -64,8 +64,14 @@ function songToDraft(song: Song): SongDraft {
     folderId: song.folderId || "",
     categoryIds: [...(song.categoryIds || [])],
     appris: Boolean(song.appris),
-    audioUrlsByPupitre: { ...(song.audioUrlsByPupitre || {}) },
-    audioFilesByPupitre: { ...(song.audioFilesByPupitre || {}) }
+    audioUrlsByPupitre: {
+      ...(song.audioUrlsByPupitre || {}),
+      ...((!Object.keys(song.audioUrlsByPupitre || {}).length && song.audioUrl) ? { general: song.audioUrl } : {})
+    },
+    audioFilesByPupitre: {
+      ...(song.audioFilesByPupitre || {}),
+      ...((!Object.keys(song.audioUrlsByPupitre || {}).length && song.audioUrl) ? { general: Boolean(song.audioIsFile) } : {})
+    }
   };
 }
 
@@ -242,8 +248,8 @@ export function SongsScreen({
       compositeur: form.compositeur.trim(),
       partitionUrl: form.partitionUrl.trim(),
       partitionType: form.partitionType || "link",
-      audioUrl: "",
-      audioIsFile: false,
+      audioUrl: form.audioUrlsByPupitre.general || "",
+      audioIsFile: Boolean(form.audioFilesByPupitre.general),
       youtubeUrl: form.youtubeUrl.trim(),
       folderId: form.folderId,
       categoryIds: [...new Set(form.categoryIds)],
@@ -414,7 +420,9 @@ export function SongsScreen({
         <div className="compact-list song-list-ultra-compact">
           {visibleSongs.length === 0 && <div className="empty-panel">Aucun chant ne correspond à ces critères.</div>}
           {visibleSongs.map((song) => {
-            const audioCount = Object.values(song.audioUrlsByPupitre || {}).filter(Boolean).length;
+            const voiceAudioCount = Object.values(song.audioUrlsByPupitre || {}).filter(Boolean).length;
+            const legacyGeneralAudio = voiceAudioCount === 0 ? song.audioUrl || "" : "";
+            const audioCount = voiceAudioCount || (legacyGeneralAudio ? 1 : 0);
             const isOpen = openId === song.id;
             const labels = (song.categoryIds || []).map((id) => categoryLabel(id, categories));
             return (
@@ -439,6 +447,14 @@ export function SongsScreen({
                       {canEdit && <button className="danger-text" disabled={busy === `delete-${song.id}`} onClick={() => void removeSong(song)}>Supprimer</button>}
                     </div>
                     <div className="voice-audio-grid compact-audio-grid">
+                      {legacyGeneralAudio && (
+                        <div className="voice-audio-card has-audio">
+                          <div className="voice-audio-heading"><div><strong>Audio général</strong><small>Audio disponible</small></div>
+                            <button className="audio-download-icon" aria-label="Télécharger l'audio général" title="Télécharger l'audio général" onClick={() => void saveUrlAsFile(legacyGeneralAudio, `${safeName(song.titre)}_general.${extensionFromUrl(legacyGeneralAudio)}`)}><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14" /></svg></button>
+                          </div>
+                          <audio controls preload="metadata" src={legacyGeneralAudio} />
+                        </div>
+                      )}
                       {voices.map(([key, label]) => {
                         const url = song.audioUrlsByPupitre?.[key];
                         return (

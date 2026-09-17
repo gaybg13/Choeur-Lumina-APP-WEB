@@ -374,7 +374,7 @@ export default function App() {
     case "admin":
       content = canAdmin
         ? <AdminScreen currentMember={member} members={members} events={activeEvents} onBack={() => void openTab("profile")} />
-        : <HomeScreen member={member} nextEvent={nextEvent} songs={songs} announcements={announcements} suggestions={suggestions} onOpen={(value) => void openTab(value)} />;
+        : <HomeScreen uid={user.uid} member={member} nextEvent={nextEvent} songs={songs} announcements={announcements} suggestions={suggestions} onOpen={(value) => void openTab(value)} />;
       break;
     case "profile":
       content = (
@@ -388,6 +388,7 @@ export default function App() {
     default:
       content = (
         <HomeScreen
+          uid={user.uid}
           member={member}
           nextEvent={nextEvent}
           songs={songs}
