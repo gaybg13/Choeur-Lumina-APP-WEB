@@ -124,6 +124,7 @@ export default function App() {
   const [groupMessages, setGroupMessages] = useState<GroupMessage[]>([]);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [tab, setTab] = useState<Tab>(initialTabFromUrl);
+  const [songToOpen, setSongToOpen] = useState<string | null>(() => new URLSearchParams(window.location.search).get("song"));
   const [calendarDayKey, setCalendarDayKey] = useState(() => parisDayKey());
 
   async function loadCurrentMember(uid: string) {
@@ -346,6 +347,10 @@ export default function App() {
     setTab(nextTab);
     const url = new URL(window.location.href);
     url.searchParams.set("tab", nextTab);
+    if (nextTab !== "songs") {
+      setSongToOpen(null);
+      url.searchParams.delete("song");
+    }
     window.history.replaceState({}, "", url);
     void clearDisplayedNotifications();
     if (nextTab === "agenda" && member) {
@@ -355,6 +360,15 @@ export default function App() {
         // L'agenda reste utilisable même si le marqueur de lecture n'est pas autorisé.
       }
     }
+  }
+
+  function openSong(songId: string) {
+    setSongToOpen(songId);
+    setTab("songs");
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", "songs");
+    url.searchParams.set("song", songId);
+    window.history.replaceState({}, "", url);
   }
 
   if (!user) return <LoginScreen />;
@@ -369,6 +383,8 @@ export default function App() {
           categories={categories}
           canEdit={canEditContent}
           uid={user.uid}
+          initialSongId={songToOpen}
+          onInitialSongOpened={() => setSongToOpen(null)}
         />
       );
       break;
@@ -392,7 +408,7 @@ export default function App() {
     case "admin":
       content = canAdmin
         ? <AdminScreen currentMember={member} members={members} events={activeEvents} onBack={() => void openTab("profile")} />
-        : <HomeScreen uid={user.uid} member={member} nextEvent={nextEvent} songs={recentSongs} announcements={announcements} suggestions={suggestions} onOpen={(value) => void openTab(value)} />;
+        : <HomeScreen uid={user.uid} member={member} nextEvent={nextEvent} songs={recentSongs} announcements={announcements} suggestions={suggestions} onOpen={(value) => void openTab(value)} onOpenSong={openSong} />;
       break;
     case "profile":
       content = (
@@ -413,6 +429,7 @@ export default function App() {
           announcements={announcements}
           suggestions={suggestions}
           onOpen={(value) => void openTab(value)}
+          onOpenSong={openSong}
         />
       );
   }
