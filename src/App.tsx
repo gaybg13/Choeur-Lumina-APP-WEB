@@ -248,15 +248,15 @@ export default function App() {
     });
 
     const unAnnouncements = onSnapshot(query(collection(db, "announcements"), orderBy("createdAt", "desc")), (snap) => {
-      setAnnouncements(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Announcement)));
+      setAnnouncements(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Announcement));
     });
 
     const unSuggestions = onSnapshot(query(collection(db, "anonymousSuggestions"), orderBy("createdAt", "desc")), (snap) => {
-      setSuggestions(snap.docs.map((d) => ({ id: d.id, ...d.data() } as AnonymousSuggestion)));
+      setSuggestions(snap.docs.map((d) => ({ id: d.id, ...d.data() } as AnonymousSuggestion));
     });
 
     const unGroup = onSnapshot(query(collection(db, "groupChat"), orderBy("timestamp", "asc")), (snap) => {
-      setGroupMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() } as GroupMessage)));
+      setGroupMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() } as GroupMessage));
     });
 
     const unConversations = onSnapshot(
@@ -307,7 +307,25 @@ export default function App() {
     );
   }, [activeEvents, members]);
 
-  const nextEvent = allEvents.find((e) => (e.date?.toDate().getTime() || 0) >= Date.now()) || null;
+  // L'accueil doit montrer le prochain vrai événement du chœur, comme l'application Android.
+  // Les anniversaires synthétiques restent visibles dans l'Agenda, mais ne prennent pas la place
+  // d'une répétition, d'une messe ou d'une prestation dans le bloc « Prochain événement ».
+  const nextEvent = useMemo(() => {
+    const now = Date.now();
+    return [...activeEvents]
+      .filter((event) => !event.cancelled && (event.date?.toDate().getTime() || 0) >= now)
+      .sort((a, b) => (a.date?.toDate().getTime() || 0) - (b.date?.toDate().getTime() || 0))[0] || null;
+  }, [activeEvents]);
+
+  // La bibliothèque reste triée alphabétiquement, mais l'accueil doit afficher les vrais
+  // derniers chants ajoutés. createdAt est renseigné à la création d'un chant.
+  const recentSongs = useMemo(() => [...songs].sort((a, b) => {
+    const aCreated = a.createdAt?.toMillis?.() || 0;
+    const bCreated = b.createdAt?.toMillis?.() || 0;
+    if (bCreated !== aCreated) return bCreated - aCreated;
+    return a.titre.localeCompare(b.titre, "fr");
+  }), [songs]);
+
   const categories = useMemo(() => mergeSongCategories(customCategories), [customCategories]);
   const canEditContent = member?.role === "super_admin" || member?.role === "admin" || member?.role === "contributeur";
   const canAdmin = member?.role === "super_admin" || member?.role === "admin";
@@ -374,7 +392,7 @@ export default function App() {
     case "admin":
       content = canAdmin
         ? <AdminScreen currentMember={member} members={members} events={activeEvents} onBack={() => void openTab("profile")} />
-        : <HomeScreen uid={user.uid} member={member} nextEvent={nextEvent} songs={songs} announcements={announcements} suggestions={suggestions} onOpen={(value) => void openTab(value)} />;
+        : <HomeScreen uid={user.uid} member={member} nextEvent={nextEvent} songs={recentSongs} announcements={announcements} suggestions={suggestions} onOpen={(value) => void openTab(value)} />;
       break;
     case "profile":
       content = (
@@ -391,7 +409,7 @@ export default function App() {
           uid={user.uid}
           member={member}
           nextEvent={nextEvent}
-          songs={songs}
+          songs={recentSongs}
           announcements={announcements}
           suggestions={suggestions}
           onOpen={(value) => void openTab(value)}
