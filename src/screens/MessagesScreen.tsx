@@ -144,6 +144,38 @@ function formatTime(message: AnyMessage) {
   );
 }
 
+const CHAT_RECORDING_BITRATE = 160_000;
+
+function highQualityVoiceConstraints(): MediaStreamConstraints {
+  return {
+    audio: {
+      channelCount: { ideal: 1 },
+      sampleRate: { ideal: 48_000 },
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false
+    }
+  };
+}
+
+function createHighQualityVoiceRecorder(stream: MediaStream) {
+  const mimeType = ["audio/webm;codecs=opus", "audio/webm"].find((type) => MediaRecorder.isTypeSupported(type));
+  try {
+    return new MediaRecorder(stream, {
+      ...(mimeType ? { mimeType } : {}),
+      audioBitsPerSecond: CHAT_RECORDING_BITRATE
+    });
+  } catch {
+    return new MediaRecorder(stream);
+  }
+}
+
+function recordedVoiceExtension(mimeType: string) {
+  if (mimeType.includes("mp4")) return "m4a";
+  if (mimeType.includes("ogg")) return "ogg";
+  return "webm";
+}
+
 function formatLastSeen(status?: UserStatus) {
   if (status?.online) return "En ligne";
   const date = status?.lastSeen?.toDate();
@@ -214,6 +246,7 @@ export function MessagesScreen({
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recorderStreamRef = useRef<MediaStream | null>(null);
   const recorderChunksRef = useRef<Blob[]>([]);
+  const recordingStartedAtRef = useRef(0);
   const isSuperAdmin = member?.role === "super_admin";
   const newsTickerText = announcements.map((item) => item.text.trim()).filter(Boolean).join("   •   ") || "Aucune actualité pour le moment.";
 
@@ -614,8 +647,8 @@ export function MessagesScreen({
       return;
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      const stream = await navigator.mediaDevices.getUserMedia(highQualityVoiceConstraints());
+      const recorder = createHighQualityVoiceRecorder(stream);
       recorderStreamRef.current = stream;
       recorderRef.current = recorder;
       recorderChunksRef.current = [];
@@ -623,7 +656,7 @@ export function MessagesScreen({
         if (event.data.size) recorderChunksRef.current.push(event.data);
       };
       recorder.onstop = () => {
-        const durationMs = Date.now() - recordingStartedAt;
+        const durationMs = Date.now() - recordingStartedAtRef.current;
         const blob = new Blob(recorderChunksRef.current, {
           type: recorder.mimeType || "audio/webm",
         });
@@ -634,7 +667,9 @@ export function MessagesScreen({
         setRecording(false);
         setPendingVoice({ blob, url, durationMs });
       };
-      setRecordingStartedAt(Date.now());
+      const startedAt = Date.now();
+      recordingStartedAtRef.current = startedAt;
+      setRecordingStartedAt(startedAt);
       recorder.start();
       setRecording(true);
     } catch (error) {
@@ -653,7 +688,7 @@ export function MessagesScreen({
     try {
       const url = await uploadBlob(
         pendingVoice.blob,
-        `voice_notes/${uid}/${Date.now()}.webm`,
+        `voice_notes/${uid}/${Date.now()}.${recordedVoiceExtension(pendingVoice.blob.type)}`,
       );
       await sendPayload({
         type: "voice",
