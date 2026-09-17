@@ -1,4 +1,4 @@
-# Chœur Lumina Web — v2.8.0
+# Chœur Lumina Web — v2.8.2
 
 ## Corrections et alignement avec Android
 
@@ -10,7 +10,7 @@
 - Suppression d'un membre + suppression de son rôle rendues atomiques.
 - Régénération des codes d'invitation alignée sur Android : 8 caractères.
 - Régénérer un code ne remet plus un compte actif à `claimed=false`.
-- Version Web passée à **2.8.0** (application + service worker + fichier de version).
+- Version Web passée à **2.8.2** (application + service worker + fichier de version).
 
 ## Construction
 
@@ -23,4 +23,4 @@ npm install
 npm run build
 ```
 
-Le nouveau dossier `dist` généré contiendra la v2.8.0 prête pour Firebase Hosting.
+Le nouveau dossier `dist` généré contiendra la v2.8.2 prête pour Firebase Hosting.

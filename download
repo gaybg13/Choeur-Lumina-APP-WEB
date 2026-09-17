@@ -1,0 +1,14 @@
+{
+  "projects": {
+    "default": "chorale-lumina-app"
+  },
+  "targets": {
+    "chorale-lumina-app": {
+      "hosting": {
+        "pwa": [
+          "chorale-lumina-app"
+        ]
+      }
+    }
+  }
+}
