@@ -351,6 +351,10 @@ export default function App() {
       setSongToOpen(null);
       url.searchParams.delete("song");
     }
+    if (nextTab !== "messages") {
+      url.searchParams.delete("mode");
+      url.searchParams.delete("targetUid");
+    }
     window.history.replaceState({}, "", url);
     void clearDisplayedNotifications();
     if (nextTab === "agenda" && member) {
