@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   addDoc,
   arrayUnion,
@@ -159,7 +159,16 @@ function highQualityVoiceConstraints(): MediaStreamConstraints {
 }
 
 function createHighQualityVoiceRecorder(stream: MediaStream) {
-  const mimeType = ["audio/webm;codecs=opus", "audio/webm"].find((type) => MediaRecorder.isTypeSupported(type));
+  // MP4/AAC est privilégié car il est lisible nativement sur iPhone/Safari,
+  // Android et la majorité des navigateurs modernes. WebM/Opus reste le repli.
+  const mimeType = [
+    "audio/mp4;codecs=mp4a.40.2",
+    "audio/mp4",
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/ogg;codecs=opus"
+  ].find((type) => MediaRecorder.isTypeSupported(type));
+
   try {
     return new MediaRecorder(stream, {
       ...(mimeType ? { mimeType } : {}),
@@ -174,6 +183,180 @@ function recordedVoiceExtension(mimeType: string) {
   if (mimeType.includes("mp4")) return "m4a";
   if (mimeType.includes("ogg")) return "ogg";
   return "webm";
+}
+
+function formatVoiceClock(seconds: number) {
+  const safe = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
+  const total = Math.floor(safe);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+}
+
+function formatMessageDay(message: AnyMessage) {
+  const date = message.timestamp?.toDate();
+  if (!date) return "";
+  const today = new Date();
+  const todayKey = today.toDateString();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (date.toDateString() === todayKey) return "Aujourd’hui";
+  if (date.toDateString() === yesterday.toDateString()) return "Hier";
+  return date.toLocaleDateString("fr-FR", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    year: date.getFullYear() === today.getFullYear() ? undefined : "numeric"
+  });
+}
+
+let activeVoiceElement: HTMLAudioElement | null = null;
+
+function VoiceNotePlayer({
+  src,
+  durationMs = 0,
+  compact = false
+}: {
+  src: string;
+  durationMs?: number;
+  compact?: boolean;
+}) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [position, setPosition] = useState(0);
+  const [duration, setDuration] = useState(Math.max(0, durationMs / 1000));
+  const [speed, setSpeed] = useState(1);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const syncDuration = () => {
+      if (Number.isFinite(audio.duration) && audio.duration > 0) {
+        setDuration(audio.duration);
+      }
+      setFailed(false);
+    };
+    const syncPosition = () => setPosition(audio.currentTime || 0);
+    const onPlay = () => {
+      if (activeVoiceElement && activeVoiceElement !== audio) {
+        activeVoiceElement.pause();
+      }
+      activeVoiceElement = audio;
+      setPlaying(true);
+    };
+    const onPause = () => setPlaying(false);
+    const onEnded = () => {
+      setPlaying(false);
+      setPosition(0);
+      if (activeVoiceElement === audio) activeVoiceElement = null;
+    };
+    const onError = () => {
+      setPlaying(false);
+      setFailed(true);
+    };
+
+    audio.addEventListener("loadedmetadata", syncDuration);
+    audio.addEventListener("durationchange", syncDuration);
+    audio.addEventListener("timeupdate", syncPosition);
+    audio.addEventListener("play", onPlay);
+    audio.addEventListener("pause", onPause);
+    audio.addEventListener("ended", onEnded);
+    audio.addEventListener("error", onError);
+    audio.load();
+
+    return () => {
+      if (activeVoiceElement === audio) activeVoiceElement = null;
+      audio.pause();
+      audio.removeEventListener("loadedmetadata", syncDuration);
+      audio.removeEventListener("durationchange", syncDuration);
+      audio.removeEventListener("timeupdate", syncPosition);
+      audio.removeEventListener("play", onPlay);
+      audio.removeEventListener("pause", onPause);
+      audio.removeEventListener("ended", onEnded);
+      audio.removeEventListener("error", onError);
+    };
+  }, [src]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.playbackRate = speed;
+    if ("preservesPitch" in audio) {
+      (audio as HTMLAudioElement & { preservesPitch: boolean }).preservesPitch = true;
+    }
+  }, [speed]);
+
+  async function togglePlayback() {
+    const audio = audioRef.current;
+    if (!audio || failed) return;
+    try {
+      if (audio.paused) {
+        if (activeVoiceElement && activeVoiceElement !== audio) {
+          activeVoiceElement.pause();
+        }
+        activeVoiceElement = audio;
+        audio.playbackRate = speed;
+        await audio.play();
+      } else {
+        audio.pause();
+      }
+    } catch {
+      setFailed(true);
+      setPlaying(false);
+    }
+  }
+
+  function cycleSpeed() {
+    setSpeed((current) => current === 1 ? 1.5 : current === 1.5 ? 2 : 1);
+  }
+
+  const effectiveDuration = Math.max(duration, durationMs / 1000, 0.1);
+
+  return (
+    <div className={`voice-note-custom ${compact ? "compact" : ""} ${failed ? "has-error" : ""}`}>
+      <audio ref={audioRef} src={src} preload="metadata" />
+      <button
+        type="button"
+        className="voice-play-button"
+        onClick={() => void togglePlayback()}
+        aria-label={playing ? "Mettre en pause" : "Lire la note vocale"}
+      >
+        {playing ? "Ⅱ" : "▶"}
+      </button>
+      <div className="voice-progress-wrap">
+        <input
+          aria-label="Position dans la note vocale"
+          type="range"
+          min={0}
+          max={effectiveDuration}
+          step={0.05}
+          value={Math.min(position, effectiveDuration)}
+          onChange={(event) => {
+            const next = Number(event.target.value);
+            setPosition(next);
+            if (audioRef.current) audioRef.current.currentTime = next;
+          }}
+        />
+        <div className="voice-time-row">
+          <span>{formatVoiceClock(position)}</span>
+          <span>{failed ? "Audio indisponible" : formatVoiceClock(effectiveDuration)}</span>
+        </div>
+      </div>
+      <button
+        type="button"
+        className="voice-speed-button"
+        onClick={cycleSpeed}
+        aria-label="Changer la vitesse de lecture"
+      >
+        {speed}×
+      </button>
+      {failed && (
+        <a className="voice-fallback-link" href={src} target="_blank" rel="noreferrer">
+          Ouvrir
+        </a>
+      )}
+    </div>
+  );
 }
 
 function formatLastSeen(status?: UserStatus) {
@@ -534,7 +717,16 @@ export function MessagesScreen({
 
   async function uploadBlob(blob: Blob, path: string) {
     const ref = storageRef(storage, path);
-    await uploadBytes(ref, blob);
+    await uploadBytes(
+      ref,
+      blob,
+      blob.type
+        ? {
+            contentType: blob.type,
+            cacheControl: "public,max-age=3600"
+          }
+        : undefined
+    );
     return getDownloadURL(ref);
   }
 
@@ -980,6 +1172,7 @@ export function MessagesScreen({
                     </div>
                   </div>
                   <MessagePane
+                    key={`private-${privateTarget.uid}`}
                     messages={visibleMessages}
                     uid={uid}
                     mode="private"
@@ -1059,6 +1252,7 @@ export function MessagesScreen({
               )}
             </div>
             <MessagePane
+              key="group"
               messages={visibleMessages}
               uid={uid}
               mode="group"
@@ -1235,22 +1429,36 @@ function MessagePane({
   useLayoutEffect(() => {
     if (!messages.length) {
       previousCountRef.current = 0;
+      previousIdsRef.current = new Set();
       return;
     }
+
     const previous = previousCountRef.current;
     const previousIds = previousIdsRef.current;
-    const addedIncoming = messages.filter((message) => !previousIds.has(message.id) && message.authorUid !== uid).length;
+    const added = messages.filter((message) => !previousIds.has(message.id));
+    const addedMine = added.some((message) => message.authorUid === uid);
+    const addedIncoming = added.filter((message) => message.authorUid !== uid).length;
+
     requestAnimationFrame(() => {
-      if (previous === 0 || nearBottomRef.current) {
+      if (previous === 0) {
+        // À chaque ouverture/réouverture d'un fil : toujours commencer au dernier message.
         scrollToBottom("auto");
+      } else if (addedMine) {
+        // Comme WhatsApp : le message que je viens d'envoyer reste immédiatement visible.
+        scrollToBottom("smooth");
+      } else if (addedIncoming > 0 && nearBottomRef.current) {
+        // Si je lis déjà la fin du fil, le nouveau message suit naturellement.
+        scrollToBottom("smooth");
       } else if (addedIncoming > 0) {
+        // Si je suis remonté dans l'historique, on ne m'arrache pas de ma lecture.
         setNewMessageCount((count) => count + addedIncoming);
         setShowJumpButton(true);
       }
     });
+
     previousCountRef.current = messages.length;
     previousIdsRef.current = new Set(messages.map((message) => message.id));
-  }, [messages.length, mode, otherUid]);
+  }, [messages, uid]);
 
   function onScroll() {
     const list = listRef.current;
@@ -1292,8 +1500,11 @@ function MessagePane({
         {messages.length === 0 && (
           <div className="chat-empty">Aucun message pour le moment.</div>
         )}
-        {messages.map((message) => {
+        {messages.map((message, index) => {
           const mine = message.authorUid === uid;
+          const dayLabel = formatMessageDay(message);
+          const previousDayLabel = index > 0 ? formatMessageDay(messages[index - 1]) : "";
+          const showDay = Boolean(dayLabel && dayLabel !== previousDayLabel);
           const groupMessage = message as GroupMessage;
           const directMessage = message as DirectMessage;
           const groupedReactions = Object.values(
@@ -1324,9 +1535,10 @@ function MessagePane({
             isEmojiOnly(message.texte);
 
           return (
-            <div
+            <Fragment key={message.id}>
+              {showDay && <div className="message-day-separator"><span>{dayLabel}</span></div>}
+              <div
               className={`message-line ${mine ? "mine" : ""} ${selected ? "message-selected" : ""}`}
-              key={message.id}
               data-message-id={message.id}
             >
               <div
@@ -1367,11 +1579,9 @@ function MessagePane({
                     />
                   </a>
                 ) : message.type === "voice" ? (
-                  <audio
-                    className="voice-note-player"
-                    controls
-                    preload="metadata"
-                    src={message.mediaUrl}
+                  <VoiceNotePlayer
+                    src={message.mediaUrl || ""}
+                    durationMs={message.durationMs || 0}
                   />
                 ) : (
                   <p className={emojiOnly ? "emoji-only-message" : ""}>
@@ -1459,6 +1669,7 @@ function MessagePane({
                 )}
               </div>
             </div>
+            </Fragment>
           );
         })}
       </div>
@@ -1522,7 +1733,11 @@ function Composer({
       )}
       {pendingVoice && (
         <div className="voice-preview">
-          <audio controls src={pendingVoice.url} />
+          <VoiceNotePlayer
+            src={pendingVoice.url}
+            durationMs={pendingVoice.durationMs}
+            compact
+          />
           <button onClick={onDeleteVoice}>Supprimer</button>
           <button className="send-voice" disabled={busy} onClick={onSendVoice}>
             Envoyer
