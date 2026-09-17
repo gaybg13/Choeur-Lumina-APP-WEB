@@ -17,6 +17,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "24"
+          registry-url: "https://registry.npmjs.org"
 
       - name: Trouver le dossier du projet PWA
         id: project
@@ -43,7 +44,9 @@ jobs:
 
       - name: Installer les dépendances
         working-directory: ${{ steps.project.outputs.dir }}
-        run: npm install
+        run: |
+          npm config set registry https://registry.npmjs.org/
+          npm ci
 
       - name: Construire la PWA
         working-directory: ${{ steps.project.outputs.dir }}
