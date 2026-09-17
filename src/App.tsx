@@ -248,15 +248,15 @@ export default function App() {
     });
 
     const unAnnouncements = onSnapshot(query(collection(db, "announcements"), orderBy("createdAt", "desc")), (snap) => {
-      setAnnouncements(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Announcement));
+      setAnnouncements(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Announcement)));
     });
 
     const unSuggestions = onSnapshot(query(collection(db, "anonymousSuggestions"), orderBy("createdAt", "desc")), (snap) => {
-      setSuggestions(snap.docs.map((d) => ({ id: d.id, ...d.data() } as AnonymousSuggestion));
+      setSuggestions(snap.docs.map((d) => ({ id: d.id, ...d.data() } as AnonymousSuggestion)));
     });
 
     const unGroup = onSnapshot(query(collection(db, "groupChat"), orderBy("timestamp", "asc")), (snap) => {
-      setGroupMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() } as GroupMessage));
+      setGroupMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() } as GroupMessage)));
     });
 
     const unConversations = onSnapshot(
