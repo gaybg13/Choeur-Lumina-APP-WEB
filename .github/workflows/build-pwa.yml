@@ -3,6 +3,8 @@ name: Build & Deploy PWA
 on:
   push:
     branches: [ main ]
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
 
 permissions:
@@ -45,6 +47,7 @@ jobs:
           path: dist/
 
       - name: Déployer sur Firebase Hosting
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: "${{ secrets.GITHUB_TOKEN }}"
