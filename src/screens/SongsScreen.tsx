@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import {
   addDoc,
   collection,
@@ -146,6 +146,7 @@ function formatSongVoiceTime(seconds: number) {
 
 function SongVoicePlayer({ src, label }: { src: string; label: string }) {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const [activated, setActivated] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -156,25 +157,44 @@ function SongVoicePlayer({ src, label }: { src: string; label: string }) {
     const audio = audioRef.current;
     if (!audio) return;
 
+    setActivated(false);
+    setPlaying(false);
+    setPosition(0);
+    setDuration(0);
+    setSpeed(1);
+    setFailed(false);
+
     const syncDuration = () => {
-      if (Number.isFinite(audio.duration) && audio.duration > 0) setDuration(audio.duration);
+      setPosition(audio.currentTime || 0);
+      if (Number.isFinite(audio.duration) && audio.duration > 0) {
+        setDuration(audio.duration);
+      }
       setFailed(false);
     };
+
     const syncPosition = () => setPosition(audio.currentTime || 0);
+
     const onPlay = () => {
-      if (activeSongVoiceElement && activeSongVoiceElement !== audio) activeSongVoiceElement.pause();
+      if (activeSongVoiceElement && activeSongVoiceElement !== audio) {
+        activeSongVoiceElement.pause();
+      }
       activeSongVoiceElement = audio;
       setPlaying(true);
     };
+
     const onPause = () => setPlaying(false);
+
     const onEnded = () => {
       setPlaying(false);
       setPosition(0);
+      audio.currentTime = 0;
       if (activeSongVoiceElement === audio) activeSongVoiceElement = null;
     };
+
     const onError = () => {
       setFailed(true);
       setPlaying(false);
+      if (activeSongVoiceElement === audio) activeSongVoiceElement = null;
     };
 
     audio.addEventListener("loadedmetadata", syncDuration);
@@ -195,43 +215,85 @@ function SongVoicePlayer({ src, label }: { src: string; label: string }) {
       audio.removeEventListener("pause", onPause);
       audio.removeEventListener("ended", onEnded);
       audio.removeEventListener("error", onError);
+      audio.removeAttribute("src");
+      audio.load();
     };
   }, [src]);
 
+  function startFromUserAction() {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (!activated || failed || !audio.getAttribute("src")) {
+      setActivated(true);
+      setFailed(false);
+      setPosition(0);
+      setDuration(0);
+      audio.src = src;
+      audio.preload = "metadata";
+      audio.load();
+    }
+
+    audio.playbackRate = speed;
+    void audio.play().catch(() => {
+      setFailed(true);
+      setPlaying(false);
+    });
+  }
+
   function togglePlayback() {
     const audio = audioRef.current;
-    if (!audio || failed) return;
-    if (audio.paused) void audio.play().catch(() => setFailed(true));
-    else audio.pause();
+    if (!audio) return;
+
+    if (!activated || failed || audio.paused) {
+      startFromUserAction();
+    } else {
+      audio.pause();
+    }
   }
 
   function cycleSpeed() {
     const audio = audioRef.current;
-    if (!audio) return;
     const next = speed === 1 ? 1.5 : speed === 1.5 ? 2 : 1;
-    audio.playbackRate = next;
     setSpeed(next);
+    if (audio && activated) audio.playbackRate = next;
   }
+
+  const progressPercent = duration > 0
+    ? Math.max(0, Math.min(100, (position / duration) * 100))
+    : 0;
 
   return (
     <div className={`song-voice-player${failed ? " failed" : ""}`}>
-      <audio ref={audioRef} src={src} preload="metadata" />
-      <button className="song-voice-play" type="button" onClick={togglePlayback} aria-label={playing ? "Pause" : "Lecture"}>
-        {failed ? "!" : playing ? "❚❚" : "▶"}
+      <audio ref={audioRef} preload="none" />
+      <button
+        className="song-voice-play"
+        type="button"
+        onClick={togglePlayback}
+        aria-label={playing ? "Pause" : `Lire ${label}`}
+      >
+        {failed ? "↻" : playing ? "❚❚" : "▶"}
       </button>
+
       <div className="song-voice-main">
         <div className="song-voice-title-row">
           <strong>{label}</strong>
-          <small>{failed ? "Audio indisponible" : `${formatSongVoiceTime(position)} / ${formatSongVoiceTime(duration)}`}</small>
+          <small>
+            {failed
+              ? "Réessayer"
+              : `${formatSongVoiceTime(activated ? position : 0)} / ${activated && duration > 0 ? formatSongVoiceTime(duration) : "--:--"}`}
+          </small>
         </div>
+
         <input
           className="song-voice-range"
           type="range"
           min={0}
           max={Math.max(duration, 1)}
           step={0.1}
-          value={Math.min(position, Math.max(duration, 1))}
-          disabled={failed || duration <= 0}
+          value={activated && duration > 0 ? Math.min(position, duration) : 0}
+          disabled={!activated || failed || duration <= 0}
+          style={{ "--progress": `${progressPercent}%` } as CSSProperties}
           onChange={(event) => {
             const next = Number(event.currentTarget.value);
             setPosition(next);
@@ -240,7 +302,14 @@ function SongVoicePlayer({ src, label }: { src: string; label: string }) {
           aria-label={`Position de lecture de ${label}`}
         />
       </div>
-      <button className="song-voice-speed" type="button" onClick={cycleSpeed} disabled={failed}>
+
+      <button
+        className="song-voice-speed"
+        type="button"
+        onClick={cycleSpeed}
+        disabled={failed}
+        aria-label={`Vitesse de lecture ${label}`}
+      >
         {speed === 1.5 ? "1,5×" : `${speed}×`}
       </button>
     </div>
