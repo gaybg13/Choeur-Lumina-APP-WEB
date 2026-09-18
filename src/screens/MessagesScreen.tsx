@@ -1654,7 +1654,11 @@ function MessagePane({
                     setMenuId(menuId === message.id ? null : message.id)
                   }
                 >
-                  ⋯
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="12" cy="6" r="1.6" />
+                    <circle cx="12" cy="12" r="1.6" />
+                    <circle cx="12" cy="18" r="1.6" />
+                  </svg>
                 </button>
                 {menuId === message.id && (
                   <div
