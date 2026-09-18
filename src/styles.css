@@ -3692,12 +3692,37 @@ input, textarea {
   overflow: hidden;
   background: #07172f;
 }
-.lumina-startup-intro video {
-  display: block;
-  width: 100%;
-  height: 100%;
+.lumina-startup-halo {
+  position: absolute;
+  width: min(72vw, 430px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,.08) 0%, rgba(215,179,93,.04) 42%, rgba(7,23,47,0) 72%);
+  animation: luminaHalo 2.5s ease-in-out both;
+}
+.lumina-startup-logo {
+  position: relative;
+  z-index: 1;
+  width: min(78vw, 430px);
+  height: auto;
   object-fit: contain;
-  background: #07172f;
+  user-select: none;
+  -webkit-user-drag: none;
+  transform-origin: center;
+  animation: luminaLogoReveal 2.55s cubic-bezier(.22,.61,.36,1) both;
+}
+@keyframes luminaLogoReveal {
+  0% { opacity: 0; transform: scale(.82); filter: blur(2px); }
+  18% { opacity: 1; filter: blur(0); }
+  66% { opacity: 1; transform: scale(1.055); }
+  84% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1); }
+}
+@keyframes luminaHalo {
+  0% { opacity: 0; transform: scale(.72); }
+  28% { opacity: 1; }
+  75% { opacity: .9; transform: scale(1.08); }
+  100% { opacity: 0; transform: scale(1.12); }
 }
 
 /* Lecteur des chants, volontairement aligné sur l'expérience des notes vocales du chat. */
@@ -3762,9 +3787,65 @@ input, textarea {
   color: var(--danger);
 }
 .song-voice-range {
+  --progress: 0%;
   width: 100%;
+  height: 16px;
   margin: 0;
-  accent-color: var(--navy);
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+.song-voice-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--navy) 0%,
+    var(--navy) var(--progress),
+    #d6dce7 var(--progress),
+    #d6dce7 100%
+  );
+}
+.song-voice-range::-webkit-slider-thumb {
+  width: 12px;
+  height: 12px;
+  margin-top: -4px;
+  border: 0;
+  border-radius: 50%;
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--navy);
+  box-shadow: 0 1px 4px rgba(19,44,89,.2);
+}
+.song-voice-range::-moz-range-track {
+  height: 4px;
+  border: 0;
+  border-radius: 999px;
+  background: #d6dce7;
+}
+.song-voice-range::-moz-range-progress {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--navy);
+}
+.song-voice-range::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--navy);
+}
+.song-voice-range:disabled {
+  cursor: default;
+  opacity: .72;
+}
+.song-voice-range:disabled::-webkit-slider-thumb {
+  background: #aeb7c6;
+}
+.song-voice-range:disabled::-webkit-slider-runnable-track {
+  background: #d6dce7;
 }
 .song-voice-speed {
   border-radius: 999px;
