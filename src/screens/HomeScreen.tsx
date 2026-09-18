@@ -25,6 +25,34 @@ function formatEventTime(event: LuminaEvent) {
   return date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 }
 
+function HomeShortcutIcon({ kind }: { kind: "songs" | "agenda" | "messages" }) {
+  if (kind === "songs") {
+    return (
+      <svg className="home-shortcut-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M9 18V5l10-2v13" />
+        <circle cx="6.5" cy="18" r="2.5" />
+        <circle cx="16.5" cy="16" r="2.5" />
+      </svg>
+    );
+  }
+  if (kind === "agenda") {
+    return (
+      <svg className="home-shortcut-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3.5" y="5.5" width="17" height="15" rx="2.5" />
+        <path d="M7.5 3v5M16.5 3v5M3.5 10h17" />
+        <path d="M8 14h3M13 14h3M8 17h3M13 17h3" />
+      </svg>
+    );
+  }
+  return (
+    <svg className="home-shortcut-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 5.5h16v11H9l-5 3v-14Z" />
+      <path d="M8 10h8M8 13h5" />
+    </svg>
+  );
+}
+
+
 export function HomeScreen({
   uid,
   member,
@@ -139,9 +167,9 @@ export function HomeScreen({
         </div>
 
         <div className="shortcut-grid home-shortcuts-compact">
-          <button onClick={() => onOpen("songs")}>♫<span>Répertoire</span></button>
-          <button onClick={() => onOpen("agenda")}>▣<span>Agenda</span></button>
-          <button onClick={() => onOpen("messages")}>✉<span>Messages</span></button>
+          <button onClick={() => onOpen("songs")}><HomeShortcutIcon kind="songs" /><span>Répertoire</span></button>
+          <button onClick={() => onOpen("agenda")}><HomeShortcutIcon kind="agenda" /><span>Agenda</span></button>
+          <button onClick={() => onOpen("messages")}><HomeShortcutIcon kind="messages" /><span>Messages</span></button>
         </div>
 
         <article className="card home-news-card">
