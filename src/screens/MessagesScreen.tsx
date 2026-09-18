@@ -1418,6 +1418,8 @@ function MessagePane({
   const nearBottomRef = useRef(true);
   const [showJumpButton, setShowJumpButton] = useState(false);
   const [newMessageCount, setNewMessageCount] = useState(0);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  const highlightTimerRef = useRef<number | null>(null);
 
   const memberNames = useMemo(() => {
     const map = new Map<string, string>();
@@ -1456,6 +1458,11 @@ function MessagePane({
     nearBottomRef.current = true;
     setNewMessageCount(0);
     setShowJumpButton(false);
+    setHighlightedMessageId(null);
+    if (highlightTimerRef.current !== null) {
+      window.clearTimeout(highlightTimerRef.current);
+      highlightTimerRef.current = null;
+    }
   }, [mode, otherUid]);
 
   useLayoutEffect(() => {
@@ -1503,11 +1510,23 @@ function MessagePane({
   }
 
   function jumpToMessage(messageId: string) {
+    if (!messageId) return;
     const container = listRef.current;
     const target = container?.querySelector<HTMLElement>(
       `[data-message-id="${messageId}"]`,
     );
-    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (!target) return;
+
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlightedMessageId(messageId);
+
+    if (highlightTimerRef.current !== null) {
+      window.clearTimeout(highlightTimerRef.current);
+    }
+    highlightTimerRef.current = window.setTimeout(() => {
+      setHighlightedMessageId((current) => current === messageId ? null : current);
+      highlightTimerRef.current = null;
+    }, 1400);
   }
 
   return (
@@ -1565,12 +1584,21 @@ function MessagePane({
             message.type !== "voice" &&
             message.type !== "image" &&
             isEmojiOnly(message.texte);
+          const replyTargetId =
+            message.replyToId ||
+            [...messages.slice(0, index)]
+              .reverse()
+              .find(
+                (candidate) =>
+                  previewFor(candidate.type, candidate.texte) === message.replyToText,
+              )?.id ||
+            "";
 
           return (
             <Fragment key={message.id}>
               {showDay && <div className="message-day-separator"><span>{dayLabel}</span></div>}
               <div
-              className={`message-line ${mine ? "mine" : ""} ${selected ? "message-selected" : ""}`}
+              className={`message-line ${mine ? "mine" : ""} ${selected ? "message-selected" : ""} ${highlightedMessageId === message.id ? "message-jump-highlight" : ""}`}
               data-message-id={message.id}
             >
               <div
@@ -1593,10 +1621,16 @@ function MessagePane({
                   </span>
                 )}
                 {message.replyToText && (
-                  <div className="reply-quote">
+                  <button
+                    type="button"
+                    className="reply-quote reply-quote-link"
+                    disabled={!replyTargetId}
+                    onClick={() => jumpToMessage(replyTargetId)}
+                    aria-label="Aller au message d'origine"
+                  >
                     <strong>{message.replyToAuthor || "Message"}</strong>
                     <span>{message.replyToText}</span>
-                  </div>
+                  </button>
                 )}
                 {message.deleted ? (
                   <p className="deleted-message">Message supprimé</p>
