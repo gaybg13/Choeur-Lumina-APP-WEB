@@ -344,11 +344,6 @@ export function AgendaScreen({
     <>
       <Header title="Agenda" />
       <section className="screen agenda-v2-screen">
-        <div className="agenda-compact-heading">
-          <div><span className="section-kicker">VIE DU CHŒUR</span><h2>Agenda Lumina</h2></div>
-          {canEdit && <button className="round-add-inline" aria-label="Nouvel événement" onClick={() => setForm(emptyDraft())}>+</button>}
-        </div>
-
         <div className="agenda-intro-card">
           <span className="agenda-intro-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24">
@@ -357,10 +352,15 @@ export function AgendaScreen({
               <path d="M8 14h3M13 14h3M8 17h3" />
             </svg>
           </span>
-          <div>
+          <div className="agenda-intro-copy">
             <h3>Planning du chœur</h3>
             <p>Retrouve ici les prochains rendez-vous et indique rapidement ta présence.</p>
           </div>
+          {canEdit && (
+            <button className="agenda-intro-add" aria-label="Nouvel événement" onClick={() => setForm(emptyDraft())}>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+            </button>
+          )}
         </div>
 
         {notice && <p className="notice compact-notice">{notice}</p>}
