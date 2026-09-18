@@ -25,6 +25,24 @@ function formatEventTime(event: LuminaEvent) {
   return date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 }
 
+function HomeAccentIcon({ kind }: { kind: "welcome" | "news" }) {
+  if (kind === "welcome") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 3v4M5.6 5.6l2.8 2.8M18.4 5.6l-2.8 2.8M4 12h4M16 12h4" />
+        <path d="M8 16c1.2-1.7 2.5-2.5 4-2.5s2.8.8 4 2.5" />
+        <circle cx="12" cy="12" r="8.5" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 13.5V7.8c0-.7.5-1.2 1.2-1.2h2.1L15.5 4v13.4l-8.2-2.6H5.2c-.7 0-1.2-.6-1.2-1.3Z" />
+      <path d="M8 15v3.2c0 .5.4.8.9.8h1.8M18 8l2-1M18 13l2 1M18.5 10.5H21" />
+    </svg>
+  );
+}
+
 function HomeShortcutIcon({ kind }: { kind: "songs" | "agenda" | "messages" }) {
   if (kind === "songs") {
     return (
@@ -155,7 +173,7 @@ export function HomeScreen({
               {member?.pupitre && <small className="home-pupitre-subline">{member.pupitre}</small>}
             </div>
           </div>
-          <span className="wave home-welcome-wave" aria-hidden="true">👋</span>
+          <span className="home-welcome-mark" aria-hidden="true"><HomeAccentIcon kind="welcome" /></span>
         </div>
 
         <div className="choir-photo-hero">
@@ -173,7 +191,10 @@ export function HomeScreen({
         </div>
 
         <article className="card home-news-card">
-          <h2>Actualités</h2>
+          <div className="home-news-heading">
+            <span className="home-news-icon" aria-hidden="true"><HomeAccentIcon kind="news" /></span>
+            <h2>Actualités</h2>
+          </div>
           {announcements.length === 0 ? (
             <p>Aucune actualité pour le moment.</p>
           ) : (
