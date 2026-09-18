@@ -42,6 +42,20 @@ const eventTypes = [
   ["autre", "Autre"]
 ] as const;
 
+function eventTypeLabel(type: string) {
+  if (type === "anniversaire") return "Anniversaire";
+  return eventTypes.find(([value]) => value === type)?.[1] || type;
+}
+
+function monthLabel(date: Date) {
+  const value = date.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function monthKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
 function toDateTimeLocal(event?: LuminaEvent) {
   const date = event?.date?.toDate();
   if (!date) return "";
@@ -111,6 +125,20 @@ export function AgendaScreen({
       return date instanceof Date && parisDayKey(date) >= todayKey;
     });
   }, [events]);
+
+  const groupedVisibleEvents = useMemo(() => {
+    const groups = new Map<string, { label: string; events: LuminaEvent[] }>();
+    for (const event of visibleEvents) {
+      const date = event.date?.toDate?.();
+      if (!(date instanceof Date)) continue;
+      const key = monthKey(date);
+      if (!groups.has(key)) groups.set(key, { label: monthLabel(date), events: [] });
+      groups.get(key)!.events.push(event);
+    }
+    return [...groups.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([, group]) => group);
+  }, [visibleEvents]);
 
   async function respond(event: LuminaEvent, response: string) {
     if (!uid || event.synthetic || event.type === "anniversaire") return;
@@ -321,10 +349,28 @@ export function AgendaScreen({
           {canEdit && <button className="round-add-inline" aria-label="Nouvel événement" onClick={() => setForm(emptyDraft())}>+</button>}
         </div>
 
+        <div className="agenda-intro-card">
+          <span className="agenda-intro-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <rect x="3.5" y="5.5" width="17" height="15" rx="2.5" />
+              <path d="M7.5 3v5M16.5 3v5M3.5 10h17" />
+              <path d="M8 14h3M13 14h3M8 17h3" />
+            </svg>
+          </span>
+          <div>
+            <h3>Planning du chœur</h3>
+            <p>Retrouve ici les prochains rendez-vous et indique rapidement ta présence.</p>
+          </div>
+        </div>
+
         {notice && <p className="notice compact-notice">{notice}</p>}
 
-        <div className="compact-list timeline-list">
-          {visibleEvents.map((event) => {
+        <div className="agenda-month-groups">
+          {groupedVisibleEvents.map((group) => (
+            <section className="agenda-month-section" key={group.label}>
+              <h3 className="agenda-month-title">{group.label}</h3>
+              <div className="compact-list timeline-list">
+          {group.events.map((event) => {
             const date = event.date?.toDate();
             const myResponse = uid ? event.reponses?.[uid] : undefined;
             const isOpen = expanded === event.id;
@@ -340,18 +386,34 @@ export function AgendaScreen({
               <article className={`event-card event-card-v2 ${event.cancelled ? "event-cancelled" : ""}`} key={event.id}>
                 <div className="date-tile date-tile-v2">
                   <strong>{date?.getDate() ?? "--"}</strong>
-                  <span>{date?.toLocaleDateString("fr-FR", { month: "short" }).replace(".", "").toUpperCase()}</span>
-                  <small>{date?.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</small>
+                  <span>{date?.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "").toUpperCase()}</span>
                 </div>
 
                 <div className="event-main event-main-v2">
-                  <div className="event-topline"><span className="event-chip">{event.type}</span>{event.cancelled && <span className="danger-chip">ANNULÉ</span>}</div>
+                  <div className="event-topline">
+                    <span className="event-type-label">{eventTypeLabel(event.type)}</span>
+                    {event.cancelled && <span className="danger-chip">ANNULÉ</span>}
+                  </div>
                   <h3>{event.titre}</h3>
-                  {event.lieu && <small className="event-location">⌖ {event.lieu}</small>}
+                  <div className="event-meta-line">
+                    {date && <span className="event-time-label">{date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span>}
+                    {event.lieu && <small className="event-location">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s6-5.2 6-11A6 6 0 0 0 6 10c0 5.8 6 11 6 11Z" /><circle cx="12" cy="10" r="2" /></svg>
+                      {event.lieu}
+                    </small>}
+                  </div>
 
                   {!event.cancelled && !event.synthetic && event.type !== "anniversaire" && (
                     <div className="presence-actions">
-                      {[["present", "Présent"], ["absent", "Absent"], ["peut-etre", "Peut-être"]].map(([value, label]) => <button key={value} className={myResponse === value ? "selected" : ""} onClick={() => void respond(event, value)}>{label}</button>)}
+                      {[["present", "Présent"], ["absent", "Absent"], ["peut-etre", "Peut-être"]].map(([value, label]) => (
+                        <button
+                          key={value}
+                          className={`${myResponse === value ? "selected" : ""} presence-${value}`}
+                          onClick={() => void respond(event, value)}
+                        >
+                          {label}
+                        </button>
+                      ))}
                     </div>
                   )}
 
@@ -404,6 +466,12 @@ export function AgendaScreen({
               </article>
             );
           })}
+              </div>
+            </section>
+          ))}
+          {groupedVisibleEvents.length === 0 && (
+            <div className="agenda-empty-state">Aucun événement à venir pour le moment.</div>
+          )}
         </div>
       </section>
 
