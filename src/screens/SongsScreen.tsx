@@ -478,7 +478,14 @@ export function SongsScreen({
             return (
               <article className="song-card song-card-compact" key={song.id} id={`song-${song.id}`}>
                 <button className="song-summary song-summary-button" onClick={() => setOpenId(isOpen ? null : song.id)}>
-                  <div className="song-icon-tile">♫</div>
+                  <div className="song-icon-tile" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                      <path d="M10 17V5l9-2v12" />
+                      <circle cx="7" cy="17" r="2.5" />
+                      <circle cx="16" cy="15" r="2.5" />
+                      <path d="M10 8l9-2" />
+                    </svg>
+                  </div>
                   <div className="song-summary-copy">
                     <h3>{song.titre}</h3>
                     <small>{song.compositeur || "Compositeur non renseigné"}</small>
