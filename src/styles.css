@@ -1,18 +1,18 @@
 :root {
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: #151515;
-  background: #f8f6f0;
+  background: #fffbf3;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --navy: #132c59;
-  --gold: #d7b35d;
-  --ivory: #f8f6f0;
+  --navy: #16213e;
+  --gold: #b8901f;
+  --ivory: #fffbf3;
   --card: #ffffff;
-  --line: #e5dfd2;
-  --soft-blue: #eef3ff;
+  --line: #e8e3d8;
+  --soft-blue: #d9e2ff;
   --green-soft: #dcefe4;
   --green: #166534;
-  --amber-soft: #fff1ce;
+  --amber-soft: #ffe8b8;
   --amber: #8a5a00;
   --danger-soft: #ffe4e6;
   --danger: #9f1239;
@@ -3277,4 +3277,356 @@ input, textarea {
   border-radius: 50%;
   background: var(--navy);
   box-shadow: 0 1px 3px rgba(19,44,89,.28);
+}
+
+
+/* Web 2.9.2 — finition visuelle et parité Android */
+.home-welcome-mark {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--gold);
+  box-shadow: 0 3px 12px rgba(22,33,62,.10);
+}
+.home-welcome-mark svg {
+  width: 25px;
+  height: 25px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.home-news-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 8px;
+}
+.home-news-heading h2 {
+  margin: 0;
+}
+.home-news-icon {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: #fff4d5;
+  color: var(--gold);
+}
+.home-news-icon svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.song-icon-tile {
+  background: #f6ecd4;
+  border: 1px solid #eadbb3;
+}
+.song-icon-tile svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: var(--navy);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.song-card-compact .song-icon-tile svg {
+  width: 22px;
+  height: 22px;
+}
+
+.bubble-v2 {
+  padding-right: 41px;
+}
+.message-menu-button {
+  right: 7px;
+  top: 7px;
+  width: 25px;
+  height: 25px;
+  display: grid;
+  place-items: center;
+  background: rgba(255,255,255,.72);
+  border: 1px solid rgba(22,33,62,.08);
+  box-shadow: 0 1px 3px rgba(22,33,62,.06);
+}
+.mine .message-menu-button {
+  background: rgba(255,255,255,.45);
+}
+.message-menu-button svg {
+  width: 15px;
+  height: 15px;
+  fill: currentColor;
+}
+.message-menu-button:hover {
+  background: #fff;
+}
+
+.voice-progress-wrap {
+  gap: 7px;
+  padding-top: 2px;
+}
+.voice-progress-wrap input[type="range"] {
+  margin: 6px 0 2px;
+}
+.voice-time-row {
+  min-height: 14px;
+  align-items: center;
+  font-size: .66rem;
+  line-height: 1.2;
+}
+.voice-time-row span {
+  white-space: nowrap;
+}
+.voice-note-custom {
+  align-items: center;
+}
+
+.agenda-v2-screen {
+  padding: 16px 18px 100px;
+}
+.agenda-intro-card {
+  display: grid;
+  grid-template-columns: 46px minmax(0,1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  margin-bottom: 18px;
+  border: 1px solid #eee7d8;
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 3px 14px rgba(22,33,62,.06);
+}
+.agenda-intro-icon {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 15px;
+  background: #f5ead1;
+  color: var(--navy);
+}
+.agenda-intro-icon svg {
+  width: 25px;
+  height: 25px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.agenda-intro-copy h3 {
+  margin: 0 0 4px;
+  color: var(--navy);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.18rem;
+}
+.agenda-intro-copy p {
+  margin: 0;
+  color: #5d6470;
+  font-size: .82rem;
+  line-height: 1.42;
+}
+.agenda-intro-add {
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--gold);
+  color: var(--navy);
+  box-shadow: 0 6px 14px rgba(184,144,31,.24);
+}
+.agenda-intro-add svg {
+  width: 21px;
+  height: 21px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.1;
+  stroke-linecap: round;
+}
+.agenda-month-groups {
+  display: grid;
+  gap: 20px;
+}
+.agenda-month-section {
+  display: grid;
+  gap: 9px;
+}
+.agenda-month-title {
+  margin: 0 0 2px 2px;
+  color: var(--gold);
+  font-size: 1.03rem;
+  font-weight: 850;
+  text-transform: capitalize;
+}
+.timeline-list {
+  display: grid;
+  gap: 10px;
+}
+.event-card-v2 {
+  grid-template-columns: 58px minmax(0,1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+.date-tile-v2 {
+  min-height: 58px;
+  padding: 8px 4px;
+  border-radius: 17px;
+  background: var(--navy);
+}
+.date-tile-v2 strong {
+  font-size: 1.25rem;
+}
+.date-tile-v2 span {
+  margin-top: 5px;
+  font-size: .62rem;
+  font-weight: 750;
+}
+.event-main-v2 {
+  min-width: 0;
+  padding: 13px 14px;
+  border: 1px solid #eee8dc;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 3px 12px rgba(22,33,62,.055);
+}
+.event-main-v2 h3 {
+  margin: 4px 0 3px;
+  color: #171717;
+  font-size: 1rem;
+  line-height: 1.24;
+}
+.event-type-label {
+  color: var(--gold);
+  font-size: .72rem;
+  font-weight: 850;
+}
+.event-meta-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 2px;
+}
+.event-time-label {
+  color: var(--navy);
+  font-size: .72rem;
+  font-weight: 750;
+}
+.event-location {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #636973 !important;
+  font-size: .72rem;
+}
+.event-location svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+.agenda-v2-screen .presence-actions {
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  gap: 5px;
+  margin-top: 10px;
+}
+.agenda-v2-screen .presence-actions button {
+  min-height: 34px;
+  padding: 6px 4px;
+  border-radius: 13px;
+  font-size: .67rem;
+}
+.agenda-v2-screen .presence-actions .presence-present.selected {
+  background: #dcefe4;
+  border-color: rgba(22,101,52,.35);
+  color: #166534;
+}
+.agenda-v2-screen .presence-actions .presence-absent.selected {
+  background: #ffe4e6;
+  border-color: rgba(159,18,57,.30);
+  color: #9f1239;
+}
+.agenda-v2-screen .presence-actions .presence-peut-etre.selected {
+  background: #fff1ce;
+  border-color: rgba(138,90,0,.30);
+  color: #8a5a00;
+}
+.details-toggle {
+  padding: 8px 0 0;
+  font-size: .75rem;
+}
+.agenda-empty-state {
+  padding: 18px;
+  border-radius: 18px;
+  background: #fff;
+  color: #676d77;
+  text-align: center;
+  border: 1px solid #eee8dc;
+}
+
+@media (max-width: 480px) {
+  .agenda-v2-screen {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .agenda-intro-card {
+    grid-template-columns: 42px minmax(0,1fr) auto;
+    padding: 14px;
+    gap: 10px;
+  }
+  .agenda-intro-icon {
+    width: 42px;
+    height: 42px;
+  }
+  .agenda-intro-copy h3 {
+    font-size: 1.08rem;
+  }
+  .agenda-intro-copy p {
+    font-size: .76rem;
+  }
+  .event-card-v2 {
+    grid-template-columns: 52px minmax(0,1fr);
+    gap: 9px;
+    padding: 0;
+  }
+  .date-tile-v2 {
+    min-height: 54px;
+  }
+  .event-main-v2 {
+    padding: 11px 12px;
+  }
+  .agenda-v2-screen .presence-actions {
+    grid-template-columns: repeat(3, minmax(0,1fr));
+  }
+  .agenda-v2-screen .presence-actions button {
+    font-size: .62rem;
+    min-height: 32px;
+  }
+  .bubble-v2 {
+    padding-right: 39px;
+  }
+  .voice-note-custom {
+    min-width: 215px;
+  }
 }
