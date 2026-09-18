@@ -9,7 +9,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   </React.StrictMode>
 );
 
-const APP_VERSION = "2.9.3";
+const APP_VERSION = "2.9.4";
 const APP_SW_URL = "/sw.js";
 const APP_SW_SCOPE = "/";
 const UPDATE_INTERVAL_MS = 60_000;
