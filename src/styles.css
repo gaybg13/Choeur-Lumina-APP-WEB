@@ -3680,3 +3680,220 @@ input, textarea {
     box-shadow: 0 0 0 0 rgba(184,144,31,0), 0 2px 8px rgba(22,33,62,.05);
   }
 }
+
+
+/* Ouverture Lumina : masque les chargements techniques pendant un vrai démarrage. */
+.lumina-startup-intro {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: #07172f;
+}
+.lumina-startup-intro video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #07172f;
+}
+
+/* Lecteur des chants, volontairement aligné sur l'expérience des notes vocales du chat. */
+.song-voice-player {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border-radius: 18px;
+  background: #f1f4fa;
+  border: 1px solid #e2e7f0;
+}
+.song-voice-player > audio { display: none; }
+.song-voice-play,
+.song-voice-speed {
+  border: 0;
+  cursor: pointer;
+}
+.song-voice-play {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--navy);
+  color: white;
+  font-weight: 900;
+  font-size: .95rem;
+}
+.song-voice-player.failed .song-voice-play {
+  background: var(--danger);
+}
+.song-voice-main {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.song-voice-title-row {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.song-voice-title-row strong {
+  min-width: 0;
+  color: var(--navy);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: .78rem;
+}
+.song-voice-title-row small {
+  flex: 0 0 auto;
+  color: #777f8b;
+  font-size: .68rem;
+}
+.song-voice-player.failed .song-voice-title-row small {
+  color: var(--danger);
+}
+.song-voice-range {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--navy);
+}
+.song-voice-speed {
+  border-radius: 999px;
+  background: white;
+  color: var(--gold);
+  padding: 7px 8px;
+  min-width: 42px;
+  font-size: .7rem;
+  font-weight: 850;
+}
+.song-voice-speed:disabled { opacity: .45; }
+
+.voice-audio-card {
+  display: grid;
+  gap: 8px;
+}
+.voice-audio-card audio,
+.voice-editor-card audio {
+  display: none;
+}
+.voice-editor-card-v2 {
+  display: grid;
+  gap: 10px;
+}
+.voice-editor-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.voice-editor-heading strong { color: var(--navy); }
+.voice-remove-button {
+  border: 0;
+  background: transparent;
+  color: var(--danger);
+  font-size: .72rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.song-record-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.song-mic-button,
+.song-import-button {
+  border: 0;
+  cursor: pointer;
+  font-weight: 800;
+}
+.song-mic-button {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px 7px 8px;
+  border-radius: 999px;
+  background: var(--navy);
+  color: white;
+}
+.song-mic-button > span:first-child {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255,255,255,.14);
+}
+.song-mic-button:disabled {
+  opacity: .45;
+  cursor: default;
+}
+.song-import-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 42px;
+  margin: 0;
+  padding: 0 13px;
+  border: 1px solid #d4dbe7;
+  border-radius: 999px;
+  background: white;
+  color: var(--navy);
+}
+.song-recording-bar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 38px;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: #fff0f0;
+  color: #b91c1c;
+  font-size: .8rem;
+  font-weight: 800;
+}
+.song-recording-bar button {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 50%;
+  background: #fee2e2;
+  color: #b91c1c;
+  cursor: pointer;
+}
+.song-audio-link {
+  border-top: 1px solid #eef0f4;
+  padding-top: 7px;
+}
+.song-audio-link summary {
+  cursor: pointer;
+  color: #687384;
+  font-size: .72rem;
+  font-weight: 750;
+}
+.song-audio-link input {
+  width: 100%;
+  margin-top: 8px;
+}
+
+@media (max-width: 700px) {
+  .voice-audio-grid,
+  .voice-editor-grid {
+    grid-template-columns: 1fr;
+  }
+  .song-voice-title-row {
+    align-items: center;
+  }
+  .song-voice-title-row small {
+    font-size: .64rem;
+  }
+}

@@ -135,6 +135,118 @@ async function saveUrlAsFile(url: string, filename: string) {
   }
 }
 
+
+let activeSongVoiceElement: HTMLAudioElement | null = null;
+
+function formatSongVoiceTime(seconds: number) {
+  const safe = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
+  const total = Math.floor(safe);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+}
+
+function SongVoicePlayer({ src, label }: { src: string; label: string }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [position, setPosition] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [speed, setSpeed] = useState(1);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const syncDuration = () => {
+      if (Number.isFinite(audio.duration) && audio.duration > 0) setDuration(audio.duration);
+      setFailed(false);
+    };
+    const syncPosition = () => setPosition(audio.currentTime || 0);
+    const onPlay = () => {
+      if (activeSongVoiceElement && activeSongVoiceElement !== audio) activeSongVoiceElement.pause();
+      activeSongVoiceElement = audio;
+      setPlaying(true);
+    };
+    const onPause = () => setPlaying(false);
+    const onEnded = () => {
+      setPlaying(false);
+      setPosition(0);
+      if (activeSongVoiceElement === audio) activeSongVoiceElement = null;
+    };
+    const onError = () => {
+      setFailed(true);
+      setPlaying(false);
+    };
+
+    audio.addEventListener("loadedmetadata", syncDuration);
+    audio.addEventListener("durationchange", syncDuration);
+    audio.addEventListener("timeupdate", syncPosition);
+    audio.addEventListener("play", onPlay);
+    audio.addEventListener("pause", onPause);
+    audio.addEventListener("ended", onEnded);
+    audio.addEventListener("error", onError);
+
+    return () => {
+      audio.pause();
+      if (activeSongVoiceElement === audio) activeSongVoiceElement = null;
+      audio.removeEventListener("loadedmetadata", syncDuration);
+      audio.removeEventListener("durationchange", syncDuration);
+      audio.removeEventListener("timeupdate", syncPosition);
+      audio.removeEventListener("play", onPlay);
+      audio.removeEventListener("pause", onPause);
+      audio.removeEventListener("ended", onEnded);
+      audio.removeEventListener("error", onError);
+    };
+  }, [src]);
+
+  function togglePlayback() {
+    const audio = audioRef.current;
+    if (!audio || failed) return;
+    if (audio.paused) void audio.play().catch(() => setFailed(true));
+    else audio.pause();
+  }
+
+  function cycleSpeed() {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const next = speed === 1 ? 1.5 : speed === 1.5 ? 2 : 1;
+    audio.playbackRate = next;
+    setSpeed(next);
+  }
+
+  return (
+    <div className={`song-voice-player${failed ? " failed" : ""}`}>
+      <audio ref={audioRef} src={src} preload="metadata" />
+      <button className="song-voice-play" type="button" onClick={togglePlayback} aria-label={playing ? "Pause" : "Lecture"}>
+        {failed ? "!" : playing ? "❚❚" : "▶"}
+      </button>
+      <div className="song-voice-main">
+        <div className="song-voice-title-row">
+          <strong>{label}</strong>
+          <small>{failed ? "Audio indisponible" : `${formatSongVoiceTime(position)} / ${formatSongVoiceTime(duration)}`}</small>
+        </div>
+        <input
+          className="song-voice-range"
+          type="range"
+          min={0}
+          max={Math.max(duration, 1)}
+          step={0.1}
+          value={Math.min(position, Math.max(duration, 1))}
+          disabled={failed || duration <= 0}
+          onChange={(event) => {
+            const next = Number(event.currentTarget.value);
+            setPosition(next);
+            if (audioRef.current) audioRef.current.currentTime = next;
+          }}
+          aria-label={`Position de lecture de ${label}`}
+        />
+      </div>
+      <button className="song-voice-speed" type="button" onClick={cycleSpeed} disabled={failed}>
+        {speed === 1.5 ? "1,5×" : `${speed}×`}
+      </button>
+    </div>
+  );
+}
+
 export function SongsScreen({
   songs,
   folders,
@@ -509,7 +621,7 @@ export function SongsScreen({
                           <div className="voice-audio-heading"><div><strong>Audio général</strong><small>Audio disponible</small></div>
                             <button className="audio-download-icon" aria-label="Télécharger l'audio général" title="Télécharger l'audio général" onClick={() => void saveUrlAsFile(legacyGeneralAudio, `${safeName(song.titre)}_general.${extensionFromUrl(legacyGeneralAudio)}`)}><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14" /></svg></button>
                           </div>
-                          <audio controls preload="metadata" src={legacyGeneralAudio} />
+                          <SongVoicePlayer src={legacyGeneralAudio} label="Audio général" />
                         </div>
                       )}
                       {voices.map(([key, label]) => {
@@ -519,7 +631,7 @@ export function SongsScreen({
                             <div className="voice-audio-heading"><div><strong>{label}</strong><small>{url ? "Audio disponible" : "Pas d'audio"}</small></div>
                               {url && <button className="audio-download-icon" aria-label={`Télécharger ${label}`} title={`Télécharger ${label}`} onClick={() => void saveUrlAsFile(url, `${safeName(song.titre)}_${key}.${extensionFromUrl(url)}`)}><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14" /></svg></button>}
                             </div>
-                            {url && <audio controls preload="metadata" src={url} />}
+                            {url && <SongVoicePlayer src={url} label={label} />}
                           </div>
                         );
                       })}
@@ -563,18 +675,78 @@ export function SongsScreen({
               <div className="editor-section full-span">
                 <div className="editor-section-head"><div><h3>Audios par pupitre</h3><p>Ajoute un lien, importe un fichier ou enregistre directement.</p></div></div>
                 <div className="voice-editor-grid">
-                  {voices.map(([key, label]) => (
-                    <div className="voice-editor-card" key={key}>
-                      <strong>{label}</strong>
-                      <input value={form.audioUrlsByPupitre[key] || ""} onChange={(event) => setForm({ ...form, audioUrlsByPupitre: { ...form.audioUrlsByPupitre, [key]: event.target.value }, audioFilesByPupitre: { ...form.audioFilesByPupitre, [key]: false } })} placeholder="Lien audio" />
-                      {form.audioUrlsByPupitre[key] && <audio controls preload="metadata" src={form.audioUrlsByPupitre[key]} />}
-                      <div className="voice-editor-actions">
-                        <label className="file-action">Importer<input type="file" accept="audio/*" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadVoiceFile(key, file, file.name); event.currentTarget.value = ""; }} /></label>
-                        {recordingVoice === key ? <button className="record-stop" onClick={stopRecording}>■ Arrêter</button> : <button disabled={Boolean(recordingVoice)} onClick={() => void startRecording(key)}>● Enregistrer</button>}
-                        {form.audioUrlsByPupitre[key] && <button onClick={() => setForm({ ...form, audioUrlsByPupitre: { ...form.audioUrlsByPupitre, [key]: "" }, audioFilesByPupitre: { ...form.audioFilesByPupitre, [key]: false } })}>Retirer</button>}
+                  {voices.map(([key, label]) => {
+                    const currentAudio = form.audioUrlsByPupitre[key] || "";
+                    const isRecordingThisVoice = recordingVoice === key;
+                    return (
+                      <div className="voice-editor-card voice-editor-card-v2" key={key}>
+                        <div className="voice-editor-heading">
+                          <strong>{label}</strong>
+                          {currentAudio && (
+                            <button
+                              type="button"
+                              className="voice-remove-button"
+                              onClick={() => setForm({
+                                ...form,
+                                audioUrlsByPupitre: { ...form.audioUrlsByPupitre, [key]: "" },
+                                audioFilesByPupitre: { ...form.audioFilesByPupitre, [key]: false }
+                              })}
+                            >
+                              Retirer
+                            </button>
+                          )}
+                        </div>
+
+                        {currentAudio && <SongVoicePlayer src={currentAudio} label={label} />}
+
+                        {isRecordingThisVoice ? (
+                          <div className="song-recording-bar">
+                            <span className="recording-dot" aria-hidden="true" />
+                            <span>Enregistrement en cours…</span>
+                            <button type="button" onClick={stopRecording} aria-label={`Arrêter l'enregistrement ${label}`}>■</button>
+                          </div>
+                        ) : (
+                          <div className="song-record-actions">
+                            <button
+                              type="button"
+                              className="song-mic-button"
+                              disabled={Boolean(recordingVoice)}
+                              onClick={() => void startRecording(key)}
+                            >
+                              <span aria-hidden="true">🎤</span>
+                              <span>Enregistrer</span>
+                            </button>
+                            <label className="song-import-button">
+                              Importer
+                              <input
+                                type="file"
+                                accept="audio/*"
+                                hidden
+                                onChange={(event) => {
+                                  const file = event.target.files?.[0];
+                                  if (file) void uploadVoiceFile(key, file, file.name);
+                                  event.currentTarget.value = "";
+                                }}
+                              />
+                            </label>
+                          </div>
+                        )}
+
+                        <details className="song-audio-link">
+                          <summary>Ajouter ou modifier un lien audio</summary>
+                          <input
+                            value={form.audioFilesByPupitre[key] ? "" : currentAudio}
+                            onChange={(event) => setForm({
+                              ...form,
+                              audioUrlsByPupitre: { ...form.audioUrlsByPupitre, [key]: event.target.value },
+                              audioFilesByPupitre: { ...form.audioFilesByPupitre, [key]: false }
+                            })}
+                            placeholder="https://…"
+                          />
+                        </details>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>
