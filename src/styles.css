@@ -3690,7 +3690,7 @@ input, textarea {
   display: grid;
   place-items: center;
   overflow: hidden;
-  background: #07172f;
+  background: #00122e;
   width: 100vw;
   height: 100dvh;
   touch-action: none;
@@ -3702,7 +3702,7 @@ input, textarea {
   height: 100%;
   object-fit: contain;
   object-position: center center;
-  background: #07172f;
+  background: #00122e;
 }
 
 /* Lecteur des chants, volontairement aligné sur l'expérience des notes vocales du chat. */
