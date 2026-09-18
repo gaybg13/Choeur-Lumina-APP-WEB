@@ -3692,37 +3692,12 @@ input, textarea {
   overflow: hidden;
   background: #07172f;
 }
-.lumina-startup-halo {
-  position: absolute;
-  width: min(72vw, 430px);
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255,255,255,.08) 0%, rgba(215,179,93,.04) 42%, rgba(7,23,47,0) 72%);
-  animation: luminaHalo 2.5s ease-in-out both;
-}
-.lumina-startup-logo {
-  position: relative;
-  z-index: 1;
-  width: min(78vw, 430px);
-  height: auto;
+.lumina-startup-video {
+  display: block;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
-  user-select: none;
-  -webkit-user-drag: none;
-  transform-origin: center;
-  animation: luminaLogoReveal 2.55s cubic-bezier(.22,.61,.36,1) both;
-}
-@keyframes luminaLogoReveal {
-  0% { opacity: 0; transform: scale(.82); filter: blur(2px); }
-  18% { opacity: 1; filter: blur(0); }
-  66% { opacity: 1; transform: scale(1.055); }
-  84% { opacity: 1; transform: scale(1); }
-  100% { opacity: 0; transform: scale(1); }
-}
-@keyframes luminaHalo {
-  0% { opacity: 0; transform: scale(.72); }
-  28% { opacity: 1; }
-  75% { opacity: .9; transform: scale(1.08); }
-  100% { opacity: 0; transform: scale(1.12); }
+  background: #07172f;
 }
 
 /* Lecteur des chants, volontairement aligné sur l'expérience des notes vocales du chat. */
