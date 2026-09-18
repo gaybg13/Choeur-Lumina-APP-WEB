@@ -1,4 +1,4 @@
-const LUMINA_SW_VERSION = "2.9.1";
+const LUMINA_SW_VERSION = "2.9.2";
 
 self.addEventListener("install", () => {
   self.skipWaiting();
