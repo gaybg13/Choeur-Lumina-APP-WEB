@@ -173,7 +173,7 @@ export function HomeScreen({
               {member?.pupitre && <small className="home-pupitre-subline">{member.pupitre}</small>}
             </div>
           </div>
-          <span className="home-welcome-mark" aria-hidden="true"><HomeAccentIcon kind="welcome" /></span>
+          <span className="wave home-welcome-wave" aria-hidden="true">👋</span>
         </div>
 
         <div className="choir-photo-hero">
@@ -313,7 +313,12 @@ export function HomeScreen({
             aria-label="Gérer les actualités"
             onClick={() => setShowNewsManager(true)}
           >
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11v2h4l5 4V7l-5 4H3Zm11-3v8c2-1 4-2 7-2V10c-3 0-5-1-7-2Z" /></svg>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 4.5h9.5a2 2 0 0 1 2 2V9" />
+              <path d="M5 4.5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8" />
+              <path d="M7 9h5M7 12h4" />
+              <path d="m13.5 18.5 5.2-5.2a1.4 1.4 0 0 1 2 2l-5.2 5.2-3 .7.7-2.7Z" />
+            </svg>
           </button>
         )}
       </section>
