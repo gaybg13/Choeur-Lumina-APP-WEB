@@ -41,23 +41,36 @@ import { mergeSongCategories } from "./lib/songCategories";
 
 function LuminaStartupIntro({ onFinished }: { onFinished: () => void }) {
   useEffect(() => {
-    const timer = window.setTimeout(onFinished, 2900);
-    return () => window.clearTimeout(timer);
+    const fallback = window.setTimeout(onFinished, 7000);
+    return () => window.clearTimeout(fallback);
   }, [onFinished]);
 
   return (
     <div className="lumina-startup-intro" aria-label="Ouverture de Chœur Lumina">
-      <div className="lumina-startup-halo" aria-hidden="true" />
-      <img
-        className="lumina-startup-logo"
-        src="/icons/icon-512.png"
-        alt="Chœur Lumina"
-        draggable={false}
+      <video
+        className="lumina-startup-video"
+        src="/lumina-intro.mp4"
+        autoPlay
+        muted
+        playsInline
+        preload="auto"
+        controls={false}
+        disablePictureInPicture
+        onLoadedData={(event) => {
+          const video = event.currentTarget;
+          video.currentTime = 0;
+          void video.play().catch(() => undefined);
+        }}
+        onCanPlay={(event) => {
+          const video = event.currentTarget;
+          if (video.paused) void video.play().catch(() => undefined);
+        }}
+        onEnded={onFinished}
+        onError={onFinished}
       />
     </div>
   );
 }
-
 
 function initialTabFromUrl(): Tab {
   const requested = new URLSearchParams(window.location.search).get("tab");
