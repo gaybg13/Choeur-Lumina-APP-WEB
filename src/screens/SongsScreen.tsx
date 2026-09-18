@@ -136,6 +136,133 @@ async function saveUrlAsFile(url: string, filename: string) {
 }
 
 
+type CachedSongAudio = {
+  url: string;
+  blob: Blob;
+  cachedAt: number;
+};
+
+const SONG_AUDIO_CACHE_DB = "lumina-song-audio-cache-v1";
+const SONG_AUDIO_CACHE_STORE = "audios";
+const SONG_AUDIO_CACHE_MAX_FILES = 40;
+let songAudioDbPromise: Promise<IDBDatabase | null> | null = null;
+
+function openSongAudioCache(): Promise<IDBDatabase | null> {
+  if (typeof window === "undefined" || !("indexedDB" in window)) {
+    return Promise.resolve(null);
+  }
+
+  if (songAudioDbPromise) return songAudioDbPromise;
+
+  songAudioDbPromise = new Promise((resolve) => {
+    const request = window.indexedDB.open(SONG_AUDIO_CACHE_DB, 1);
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(SONG_AUDIO_CACHE_STORE)) {
+        const store = db.createObjectStore(SONG_AUDIO_CACHE_STORE, { keyPath: "url" });
+        store.createIndex("cachedAt", "cachedAt");
+      }
+    };
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => resolve(null);
+    request.onblocked = () => resolve(null);
+  });
+
+  return songAudioDbPromise;
+}
+
+async function readCachedSongAudio(url: string): Promise<Blob | null> {
+  const db = await openSongAudioCache();
+  if (!db) return null;
+
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(SONG_AUDIO_CACHE_STORE, "readonly");
+      const request = tx.objectStore(SONG_AUDIO_CACHE_STORE).get(url);
+      request.onsuccess = () => {
+        const record = request.result as CachedSongAudio | undefined;
+        resolve(record?.blob instanceof Blob ? record.blob : null);
+      };
+      request.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+async function trimSongAudioCache(db: IDBDatabase) {
+  try {
+    const count = await new Promise<number>((resolve) => {
+      const tx = db.transaction(SONG_AUDIO_CACHE_STORE, "readonly");
+      const request = tx.objectStore(SONG_AUDIO_CACHE_STORE).count();
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => resolve(0);
+    });
+
+    const excess = count - SONG_AUDIO_CACHE_MAX_FILES;
+    if (excess <= 0) return;
+
+    await new Promise<void>((resolve) => {
+      const tx = db.transaction(SONG_AUDIO_CACHE_STORE, "readwrite");
+      const index = tx.objectStore(SONG_AUDIO_CACHE_STORE).index("cachedAt");
+      const cursorRequest = index.openKeyCursor();
+      let remaining = excess;
+
+      cursorRequest.onsuccess = () => {
+        const cursor = cursorRequest.result;
+        if (!cursor || remaining <= 0) return;
+        tx.objectStore(SONG_AUDIO_CACHE_STORE).delete(cursor.primaryKey);
+        remaining -= 1;
+        cursor.continue();
+      };
+
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+      tx.onabort = () => resolve();
+    });
+  } catch {
+    // Le cache est une optimisation : une erreur ne doit jamais gêner la lecture.
+  }
+}
+
+async function cacheSongAudioInBackground(url: string) {
+  try {
+    const db = await openSongAudioCache();
+    if (!db) return;
+
+    const alreadyCached = await readCachedSongAudio(url);
+    if (alreadyCached) return;
+
+    const response = await fetch(url, { cache: "force-cache" });
+    if (!response.ok) return;
+
+    const blob = await response.blob();
+    if (!blob.size) return;
+
+    await new Promise<void>((resolve) => {
+      try {
+        const tx = db.transaction(SONG_AUDIO_CACHE_STORE, "readwrite");
+        tx.objectStore(SONG_AUDIO_CACHE_STORE).put({
+          url,
+          blob,
+          cachedAt: Date.now()
+        } satisfies CachedSongAudio);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+        tx.onabort = () => resolve();
+      } catch {
+        resolve();
+      }
+    });
+
+    await trimSongAudioCache(db);
+  } catch {
+    // Firebase/CORS/quota : on garde simplement la lecture en streaming.
+  }
+}
+
 let activeSongVoiceElement: HTMLAudioElement | null = null;
 
 function formatSongVoiceTime(seconds: number) {
@@ -146,23 +273,41 @@ function formatSongVoiceTime(seconds: number) {
 
 function SongVoicePlayer({ src, label }: { src: string; label: string }) {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const localObjectUrlRef = useRef<string | null>(null);
+  const userStartedRef = useRef(false);
+  const cacheStartedRef = useRef(false);
+
   const [activated, setActivated] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
   const [speed, setSpeed] = useState(1);
   const [failed, setFailed] = useState(false);
+  const [cached, setCached] = useState(false);
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
+    let cancelled = false;
+    userStartedRef.current = false;
+    cacheStartedRef.current = false;
     setActivated(false);
     setPlaying(false);
     setPosition(0);
     setDuration(0);
     setSpeed(1);
     setFailed(false);
+    setCached(false);
+
+    if (localObjectUrlRef.current) {
+      URL.revokeObjectURL(localObjectUrlRef.current);
+      localObjectUrlRef.current = null;
+    }
+
+    audio.pause();
+    audio.removeAttribute("src");
+    audio.load();
 
     const syncDuration = () => {
       setPosition(audio.currentTime || 0);
@@ -205,7 +350,22 @@ function SongVoicePlayer({ src, label }: { src: string; label: string }) {
     audio.addEventListener("ended", onEnded);
     audio.addEventListener("error", onError);
 
+    // WhatsApp-like : si cet audio a déjà été écouté, on récupère sa copie
+    // locale dès l'ouverture de la fiche. Aucun son ne démarre automatiquement.
+    void readCachedSongAudio(src).then((blob) => {
+      if (cancelled || userStartedRef.current || !blob || !audioRef.current) return;
+
+      const objectUrl = URL.createObjectURL(blob);
+      localObjectUrlRef.current = objectUrl;
+      audio.src = objectUrl;
+      audio.preload = "metadata";
+      audio.load();
+      setActivated(true);
+      setCached(true);
+    });
+
     return () => {
+      cancelled = true;
       audio.pause();
       if (activeSongVoiceElement === audio) activeSongVoiceElement = null;
       audio.removeEventListener("loadedmetadata", syncDuration);
@@ -217,12 +377,19 @@ function SongVoicePlayer({ src, label }: { src: string; label: string }) {
       audio.removeEventListener("error", onError);
       audio.removeAttribute("src");
       audio.load();
+
+      if (localObjectUrlRef.current) {
+        URL.revokeObjectURL(localObjectUrlRef.current);
+        localObjectUrlRef.current = null;
+      }
     };
   }, [src]);
 
   function startFromUserAction() {
     const audio = audioRef.current;
     if (!audio) return;
+
+    userStartedRef.current = true;
 
     if (!activated || failed || !audio.getAttribute("src")) {
       setActivated(true);
@@ -232,6 +399,13 @@ function SongVoicePlayer({ src, label }: { src: string; label: string }) {
       audio.src = src;
       audio.preload = "metadata";
       audio.load();
+    }
+
+    // La première lecture part tout de suite en streaming. En parallèle seulement,
+    // on sauvegarde le fichier pour rendre les lectures suivantes quasi instantanées.
+    if (!cached && !cacheStartedRef.current) {
+      cacheStartedRef.current = true;
+      void cacheSongAudioInBackground(src).then(() => setCached(true));
     }
 
     audio.playbackRate = speed;
@@ -266,6 +440,7 @@ function SongVoicePlayer({ src, label }: { src: string; label: string }) {
   return (
     <div className={`song-voice-player${failed ? " failed" : ""}`}>
       <audio ref={audioRef} preload="none" />
+
       <button
         className="song-voice-play"
         type="button"
