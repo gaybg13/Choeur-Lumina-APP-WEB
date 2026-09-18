@@ -49,7 +49,7 @@ function LuminaStartupIntro({ onFinished }: { onFinished: () => void }) {
     <div className="lumina-startup-intro" aria-label="Ouverture de Chœur Lumina">
       <video
         className="lumina-startup-video"
-        src="/lumina-intro.mp4"
+        src="/lumina-intro.mp4?v=2.9.5"
         autoPlay
         muted
         playsInline
@@ -161,7 +161,7 @@ export default function App() {
   const [calendarDayKey, setCalendarDayKey] = useState(() => parisDayKey());
   const [showStartupIntro, setShowStartupIntro] = useState(() => {
     try {
-      const key = "lumina-startup-intro-v1";
+      const key = "lumina-startup-intro-v2";
       const shouldPlay = sessionStorage.getItem(key) !== "shown";
       if (shouldPlay) sessionStorage.setItem(key, "shown");
       return shouldPlay;
