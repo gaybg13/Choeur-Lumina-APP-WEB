@@ -41,20 +41,18 @@ import { mergeSongCategories } from "./lib/songCategories";
 
 function LuminaStartupIntro({ onFinished }: { onFinished: () => void }) {
   useEffect(() => {
-    const fallback = window.setTimeout(onFinished, 6500);
-    return () => window.clearTimeout(fallback);
+    const timer = window.setTimeout(onFinished, 2900);
+    return () => window.clearTimeout(timer);
   }, [onFinished]);
 
   return (
     <div className="lumina-startup-intro" aria-label="Ouverture de Chœur Lumina">
-      <video
-        src="/lumina-intro.mp4"
-        autoPlay
-        muted
-        playsInline
-        preload="auto"
-        onEnded={onFinished}
-        onError={onFinished}
+      <div className="lumina-startup-halo" aria-hidden="true" />
+      <img
+        className="lumina-startup-logo"
+        src="/icons/icon-512.png"
+        alt="Chœur Lumina"
+        draggable={false}
       />
     </div>
   );
