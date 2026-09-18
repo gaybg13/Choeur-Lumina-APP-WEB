@@ -311,6 +311,10 @@ function VoiceNotePlayer({
   }
 
   const effectiveDuration = Math.max(duration, durationMs / 1000, 0.1);
+  const progressPercent = Math.max(
+    0,
+    Math.min(100, (Math.min(position, effectiveDuration) / effectiveDuration) * 100),
+  );
 
   return (
     <div className={`voice-note-custom ${compact ? "compact" : ""} ${failed ? "has-error" : ""}`}>
@@ -331,6 +335,9 @@ function VoiceNotePlayer({
           max={effectiveDuration}
           step={0.05}
           value={Math.min(position, effectiveDuration)}
+          style={{
+            background: `linear-gradient(to right, var(--navy) 0%, var(--navy) ${progressPercent}%, #d8dde8 ${progressPercent}%, #d8dde8 100%)`
+          }}
           onChange={(event) => {
             const next = Number(event.target.value);
             setPosition(next);
@@ -398,6 +405,7 @@ export function MessagesScreen({
       localStorage.getItem("lumina_private_target_uid") ||
       "",
   );
+  const restoredTargetHandledRef = useRef(false);
   const [groupText, setGroupText] = useState(
     () => localStorage.getItem("lumina_group_draft") || "",
   );
@@ -607,12 +615,14 @@ export function MessagesScreen({
   }, [privateTarget]);
 
   useEffect(() => {
-    if (!restoredTargetUidRef.current) return;
+    if (restoredTargetHandledRef.current || !restoredTargetUidRef.current) return;
     const restored = members.find(
       (candidate) => candidate.uid === restoredTargetUidRef.current,
     );
-    if (restored && !privateTarget) setPrivateTarget(restored);
-  }, [members, privateTarget]);
+    if (!restored) return;
+    restoredTargetHandledRef.current = true;
+    setPrivateTarget(restored);
+  }, [members]);
 
   // Garde la conversation active synchronisée avec le flux temps réel des membres :
   // nouvelle photo, changement de nom ou de profil visibles sans fermer la PWA.
@@ -1031,10 +1041,29 @@ export function MessagesScreen({
   }
 
   function selectPrivate(target: Member) {
+    restoredTargetHandledRef.current = true;
+    restoredTargetUidRef.current = target.uid;
+    localStorage.setItem("lumina_private_target_uid", target.uid);
     setPrivateTarget(target);
     setReplyingTo(null);
     setSelectedIds(new Set());
     setMenuId(null);
+  }
+
+  function leavePrivateConversation() {
+    restoredTargetHandledRef.current = true;
+    restoredTargetUidRef.current = "";
+    localStorage.removeItem("lumina_private_target_uid");
+    setPrivateTarget(null);
+    setDirectMessages([]);
+    setReplyingTo(null);
+    setSelectedIds(new Set());
+    setMenuId(null);
+
+    const url = new URL(window.location.href);
+    url.searchParams.delete("targetUid");
+    url.searchParams.delete("focusComposer");
+    window.history.replaceState({}, "", url);
   }
 
   const groupUnreadCount = groupMessages.filter(
@@ -1149,9 +1178,12 @@ export function MessagesScreen({
                   <div className="private-chat-head">
                     <button
                       className="mobile-back-chat"
-                      onClick={() => setPrivateTarget(null)}
+                      onClick={leavePrivateConversation}
+                      aria-label="Retour à la liste des conversations"
                     >
-                      ‹
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M15 5 8 12l7 7" />
+                      </svg>
                     </button>
                     <div className="message-avatar">
                       {privateTarget.photoUrl ? (
@@ -1751,11 +1783,20 @@ function Composer({
         </div>
       )}
       <div className="composer composer-v2">
-        <button title="Émoticônes" onClick={onSticker}>
-          ☺
+        <button className="composer-icon-button" title="Émoticônes" onClick={onSticker} aria-label="Émoticônes">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="8.5" />
+            <circle cx="9" cy="10" r="1" className="fill-dot" />
+            <circle cx="15" cy="10" r="1" className="fill-dot" />
+            <path d="M8.5 14c1 1.4 2.1 2 3.5 2s2.5-.6 3.5-2" />
+          </svg>
         </button>
-        <button title="Image" onClick={onImage} disabled={recording}>
-          ▧
+        <button className="composer-icon-button" title="Image" onClick={onImage} disabled={recording} aria-label="Ajouter une image">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
+            <circle cx="9" cy="9" r="1.6" className="fill-dot" />
+            <path d="m5.5 17 4.2-4.2 3 3 2.1-2.1 3.7 3.3" />
+          </svg>
         </button>
         <textarea
           value={text}
@@ -1772,20 +1813,29 @@ function Composer({
           }}
         />
         {text.trim() ? (
-          <button className="send-button" disabled={busy} onClick={onSend}>
-            ➤
+          <button className="send-button composer-icon-button solid" disabled={busy} onClick={onSend} aria-label="Envoyer">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m4 5 16 7-16 7 3-7-3-7Z" />
+              <path d="M7 12h13" />
+            </svg>
           </button>
         ) : recording ? (
-          <button className="record-button active" onClick={onStopRecording}>
-            ■
+          <button className="record-button active composer-icon-button solid" onClick={onStopRecording} aria-label="Arrêter l'enregistrement">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="7" y="7" width="10" height="10" rx="1.5" className="fill-shape" />
+            </svg>
           </button>
         ) : (
           <button
-            className="record-button"
+            className="record-button composer-icon-button solid"
             disabled={busy || Boolean(pendingVoice)}
             onClick={onStartRecording}
+            aria-label="Enregistrer une note vocale"
           >
-            ●
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="9" y="4" width="6" height="10" rx="3" />
+              <path d="M6.5 11.5a5.5 5.5 0 0 0 11 0M12 17v3M9 20h6" />
+            </svg>
           </button>
         )}
       </div>
