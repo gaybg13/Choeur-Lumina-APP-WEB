@@ -39,6 +39,28 @@ import { clearDisplayedNotifications } from "./lib/notifications";
 import { mergeSongCategories } from "./lib/songCategories";
 
 
+function LuminaStartupIntro({ onFinished }: { onFinished: () => void }) {
+  useEffect(() => {
+    const fallback = window.setTimeout(onFinished, 6500);
+    return () => window.clearTimeout(fallback);
+  }, [onFinished]);
+
+  return (
+    <div className="lumina-startup-intro" aria-label="Ouverture de Chœur Lumina">
+      <video
+        src="/lumina-intro.mp4"
+        autoPlay
+        muted
+        playsInline
+        preload="auto"
+        onEnded={onFinished}
+        onError={onFinished}
+      />
+    </div>
+  );
+}
+
+
 function initialTabFromUrl(): Tab {
   const requested = new URLSearchParams(window.location.search).get("tab");
   const allowed: Tab[] = ["home", "songs", "agenda", "messages", "members", "profile", "admin"];
@@ -126,6 +148,16 @@ export default function App() {
   const [tab, setTab] = useState<Tab>(initialTabFromUrl);
   const [songToOpen, setSongToOpen] = useState<string | null>(() => new URLSearchParams(window.location.search).get("song"));
   const [calendarDayKey, setCalendarDayKey] = useState(() => parisDayKey());
+  const [showStartupIntro, setShowStartupIntro] = useState(() => {
+    try {
+      const key = "lumina-startup-intro-v1";
+      const shouldPlay = sessionStorage.getItem(key) !== "shown";
+      if (shouldPlay) sessionStorage.setItem(key, "shown");
+      return shouldPlay;
+    } catch {
+      return true;
+    }
+  });
 
   async function loadCurrentMember(uid: string) {
     const snap = await getDocs(query(collection(db, "members"), where("uid", "==", uid)));
@@ -371,7 +403,18 @@ export default function App() {
     window.history.replaceState({}, "", url);
   }
 
-  if (!user) return <LoginScreen />;
+  const startupIntro = showStartupIntro
+    ? <LuminaStartupIntro onFinished={() => setShowStartupIntro(false)} />
+    : null;
+
+  if (!user) {
+    return (
+      <>
+        <LoginScreen />
+        {startupIntro}
+      </>
+    );
+  }
 
   let content;
   switch (tab) {
@@ -443,6 +486,7 @@ export default function App() {
         messageUnread={messageUnread}
         agendaUnread={agendaUnread}
       />
+      {startupIntro}
     </div>
   );
 }
