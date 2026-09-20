@@ -79,6 +79,14 @@ function eventDraft(event: LuminaEvent): EventDraft {
   };
 }
 
+function normalizeProgrammeSearch(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("fr")
+    .trim();
+}
+
 function programmeFromEvent(event: LuminaEvent, songs: Song[]): ProgrammeDraft {
   if (event.programmeParCategorie && Object.keys(event.programmeParCategorie).length) {
     return Object.fromEntries(Object.entries(event.programmeParCategorie).map(([key, ids]) => [key, [...ids]]));
@@ -111,7 +119,9 @@ export function AgendaScreen({
   const [programme, setProgramme] = useState<ProgrammeDraft>({});
   const [programmeOrder, setProgrammeOrder] = useState<string[]>([]);
   const [customPartId, setCustomPartId] = useState("");
-  const [openProgrammeCategory, setOpenProgrammeCategory] = useState<string | null>(null);
+  const [programmePickerCategory, setProgrammePickerCategory] = useState<string | null>(null);
+  const [programmePickerSearch, setProgrammePickerSearch] = useState("");
+  const [programmePickerSelection, setProgrammePickerSelection] = useState<string[]>([]);
   const [reportEvent, setReportEvent] = useState<LuminaEvent | null>(null);
   const [reportText, setReportText] = useState("");
   const [notice, setNotice] = useState("");
@@ -267,7 +277,9 @@ export function AgendaScreen({
     setProgramme(grouped);
     setProgrammeOrder([...defaultOrder, ...customOrder.filter((id) => categories.some((category) => category.id === id))]);
     setCustomPartId("");
-    setOpenProgrammeCategory(null);
+    setProgrammePickerCategory(null);
+    setProgrammePickerSearch("");
+    setProgrammePickerSelection([]);
   }
 
   async function saveProgramme() {
@@ -309,6 +321,23 @@ export function AgendaScreen({
     }
   }
 
+
+  function openProgrammeSongPicker(categoryId: string) {
+    setProgrammePickerCategory(categoryId);
+    setProgrammePickerSearch("");
+    setProgrammePickerSelection([...(programme[categoryId] || [])]);
+  }
+
+  function validateProgrammeSongPicker() {
+    if (!programmePickerCategory) return;
+    setProgramme((current) => ({
+      ...current,
+      [programmePickerCategory]: [...new Set(programmePickerSelection)]
+    }));
+    setProgrammePickerCategory(null);
+    setProgrammePickerSearch("");
+    setProgrammePickerSelection([]);
+  }
 
   function addCustomPart() {
     if (!customPartId || programmeOrder.includes(customPartId)) return;
@@ -497,7 +526,7 @@ export function AgendaScreen({
             </div>
 
             <p className="programme-helper">
-              Appuie sur une partie de la messe, choisis un chant puis la liste se referme automatiquement.
+              Appuie sur une partie de la messe pour ouvrir une fenêtre de sélection. Tu peux choisir plusieurs chants pour une même partie.
             </p>
 
             <div className="category-programme-editor compact-programme-editor">
@@ -510,15 +539,14 @@ export function AgendaScreen({
                 const selectedSongs = selectedIds
                   .map((id) => songMap.get(id))
                   .filter((song): song is Song => Boolean(song));
-                const isOpen = openProgrammeCategory === categoryId;
 
                 return (
-                  <section key={categoryId} className={`programme-category-section programme-picker-section${isOpen ? " open" : ""}`}>
+                  <section key={categoryId} className="programme-category-section programme-picker-section">
                     <div className="programme-picker-head">
                       <button
                         type="button"
                         className="programme-picker-toggle"
-                        onClick={() => setOpenProgrammeCategory(isOpen ? null : categoryId)}
+                        onClick={() => openProgrammeSongPicker(categoryId)}
                       >
                         <span>
                           <strong>{categoryLabel(categoryId, categories)}</strong>
@@ -526,11 +554,11 @@ export function AgendaScreen({
                             {selectedSongs.length
                               ? selectedSongs.map((song) => song.titre).join(" · ")
                               : categorySongs.length
-                                ? "Choisir un chant"
+                                ? "Choisir un ou plusieurs chants"
                                 : "Aucun chant disponible"}
                           </small>
                         </span>
-                        <span className="programme-picker-chevron" aria-hidden="true">{isOpen ? "⌃" : "⌄"}</span>
+                        <span className="programme-picker-chevron" aria-hidden="true">›</span>
                       </button>
 
                       {isCustomPart && (
@@ -544,45 +572,17 @@ export function AgendaScreen({
                               delete next[categoryId];
                               return next;
                             });
-                            if (openProgrammeCategory === categoryId) setOpenProgrammeCategory(null);
+                            if (programmePickerCategory === categoryId) {
+                              setProgrammePickerCategory(null);
+                              setProgrammePickerSelection([]);
+                              setProgrammePickerSearch("");
+                            }
                           }}
                         >
                           Retirer
                         </button>
                       )}
                     </div>
-
-                    {isOpen && (
-                      <div className="programme-song-picker-list">
-                        {categorySongs.length === 0 ? (
-                          <p>Aucun chant n'est encore classé dans cette catégorie.</p>
-                        ) : (
-                          categorySongs.map((song) => {
-                            const selected = selectedIds.includes(song.id);
-                            return (
-                              <button
-                                type="button"
-                                key={song.id}
-                                className={selected ? "selected" : ""}
-                                onClick={() => {
-                                  setProgramme((current) => ({
-                                    ...current,
-                                    [categoryId]: selected ? [] : [song.id]
-                                  }));
-                                  setOpenProgrammeCategory(null);
-                                }}
-                              >
-                                <span className="programme-choice-mark">{selected ? "✓" : ""}</span>
-                                <span className="programme-choice-copy">
-                                  <strong>{song.titre}</strong>
-                                  {song.compositeur && <small>{song.compositeur}</small>}
-                                </span>
-                              </button>
-                            );
-                          })
-                        )}
-                      </div>
-                    )}
                   </section>
                 );
               })}
@@ -605,6 +605,81 @@ export function AgendaScreen({
           </div>
         </div>
       )}
+
+      {programmeEvent && programmePickerCategory && (() => {
+        const categoryId = programmePickerCategory;
+        const categoryName = categoryLabel(categoryId, categories);
+        const allCategorySongs = songs
+          .filter((song) => (song.categoryIds || []).includes(categoryId))
+          .sort((a, b) => a.titre.localeCompare(b.titre, "fr"));
+        const query = normalizeProgrammeSearch(programmePickerSearch);
+        const filteredSongs = allCategorySongs.filter((song) =>
+          !query ||
+          normalizeProgrammeSearch(song.titre).includes(query) ||
+          normalizeProgrammeSearch(song.compositeur || "").includes(query)
+        );
+
+        return (
+          <div className="modal-backdrop programme-song-selector-backdrop" onClick={() => setProgrammePickerCategory(null)}>
+            <div className="admin-modal programme-song-selector-modal" onClick={(event) => event.stopPropagation()}>
+              <div className="modal-title-row">
+                <div>
+                  <span className="section-kicker">CHOIX DES CHANTS</span>
+                  <h2>{categoryName}</h2>
+                  <small>{programmePickerSelection.length} chant{programmePickerSelection.length > 1 ? "s" : ""} sélectionné{programmePickerSelection.length > 1 ? "s" : ""}</small>
+                </div>
+                <button onClick={() => setProgrammePickerCategory(null)}>×</button>
+              </div>
+
+              <div className="programme-song-search">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m16.5 16.5 4 4" /></svg>
+                <input
+                  value={programmePickerSearch}
+                  onChange={(event) => setProgrammePickerSearch(event.target.value)}
+                  placeholder="Rechercher un chant"
+                  autoFocus
+                />
+                {programmePickerSearch && <button onClick={() => setProgrammePickerSearch("")} aria-label="Effacer la recherche">×</button>}
+              </div>
+
+              <div className="programme-song-selector-list">
+                {allCategorySongs.length === 0 && <p>Aucun chant n'est encore classé dans cette catégorie.</p>}
+                {allCategorySongs.length > 0 && filteredSongs.length === 0 && <p>Aucun chant ne correspond à ta recherche.</p>}
+                {filteredSongs.map((song) => {
+                  const selected = programmePickerSelection.includes(song.id);
+                  return (
+                    <button
+                      type="button"
+                      key={song.id}
+                      className={selected ? "selected" : ""}
+                      onClick={() => setProgrammePickerSelection((current) =>
+                        selected ? current.filter((id) => id !== song.id) : [...current, song.id]
+                      )}
+                    >
+                      <span className="programme-choice-mark">{selected ? "✓" : ""}</span>
+                      <span className="programme-choice-copy">
+                        <strong>{song.titre}</strong>
+                        {song.compositeur && <small>{song.compositeur}</small>}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="modal-actions">
+                <button onClick={() => {
+                  setProgrammePickerCategory(null);
+                  setProgrammePickerSearch("");
+                  setProgrammePickerSelection([]);
+                }}>Annuler</button>
+                <button className="primary" onClick={validateProgrammeSongPicker}>
+                  Valider{programmePickerSelection.length ? ` (${programmePickerSelection.length})` : ""}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {reportEvent && (
         <div className="modal-backdrop" onClick={() => setReportEvent(null)}>
