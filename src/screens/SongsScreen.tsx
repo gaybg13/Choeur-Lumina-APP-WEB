@@ -605,15 +605,24 @@ export function SongsScreen({
   const selectedFolder = folders.find((folder) => folder.id === selectedFolderId);
   const visibleSongs = useMemo(() => {
     const normalized = search.trim().toLocaleLowerCase("fr");
-    return songs
-      .filter((song) => {
-        if (!selectedFolderId) return true;
-        if (selectedFolder?.temporary) return (selectedFolder.songIds || []).includes(song.id);
-        return song.folderId === selectedFolderId || (selectedFolder?.songIds || []).includes(song.id);
-      })
+
+    const folderSongs = !selectedFolderId
+      ? [...songs]
+      : selectedFolder?.temporary
+        ? (selectedFolder.songIds || [])
+            .map((songId) => songs.find((song) => song.id === songId))
+            .filter((song): song is Song => Boolean(song))
+        : songs.filter((song) =>
+            song.folderId === selectedFolderId || (selectedFolder?.songIds || []).includes(song.id)
+          );
+
+    const filtered = folderSongs
       .filter((song) => !selectedCategoryId || (song.categoryIds || []).includes(selectedCategoryId))
-      .filter((song) => !normalized || `${song.titre} ${song.compositeur || ""}`.toLocaleLowerCase("fr").includes(normalized))
-      .sort((a, b) => a.titre.localeCompare(b.titre, "fr"));
+      .filter((song) => !normalized || `${song.titre} ${song.compositeur || ""}`.toLocaleLowerCase("fr").includes(normalized));
+
+    return selectedFolder?.temporary
+      ? filtered
+      : filtered.sort((a, b) => a.titre.localeCompare(b.titre, "fr"));
   }, [songs, search, selectedCategoryId, selectedFolder, selectedFolderId]);
 
   const permanentFolders = folders.filter((folder) => !folder.temporary);
