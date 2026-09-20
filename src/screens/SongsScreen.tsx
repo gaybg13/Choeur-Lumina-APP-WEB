@@ -491,6 +491,15 @@ function SongVoicePlayer({ src, label }: { src: string; label: string }) {
   );
 }
 
+function normalizeFolderName(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLocaleLowerCase("fr")
+    .replace(/\s+/g, " ");
+}
+
 export function SongsScreen({
   songs,
   folders,
@@ -517,6 +526,9 @@ export function SongsScreen({
   const [viewer, setViewer] = useState<{ url: string; type: string; title: string } | null>(null);
   const [newFolder, setNewFolder] = useState("");
   const [showFolderForm, setShowFolderForm] = useState(false);
+  const [folderToRename, setFolderToRename] = useState<Folder | null>(null);
+  const [folderRenameValue, setFolderRenameValue] = useState("");
+  const folderRepairRunningRef = useRef(false);
   const [newCategory, setNewCategory] = useState("");
   const [showCategoryForm, setShowCategoryForm] = useState(false);
   const [busy, setBusy] = useState("");
@@ -540,6 +552,55 @@ export function SongsScreen({
     onInitialSongOpened?.();
   }, [initialSongId, songs, onInitialSongOpened]);
 
+
+  useEffect(() => {
+    if (!canEdit || folderRepairRunningRef.current) return;
+
+    const permanent = folders.filter((folder) => !folder.temporary);
+    const duplicateGroups = [...new Map(
+      permanent.map((folder) => [normalizeFolderName(folder.nom), [] as Folder[]])
+    ).keys()]
+      .map((key) => permanent.filter((folder) => normalizeFolderName(folder.nom) === key))
+      .filter((group) => group.length > 1);
+
+    if (!duplicateGroups.length) return;
+
+    folderRepairRunningRef.current = true;
+    void (async () => {
+      try {
+        for (const group of duplicateGroups) {
+          const ordered = [...group].sort((a, b) => {
+            const aTime = a.createdAt?.toMillis?.() || Number.MAX_SAFE_INTEGER;
+            const bTime = b.createdAt?.toMillis?.() || Number.MAX_SAFE_INTEGER;
+            return aTime - bTime || a.id.localeCompare(b.id);
+          });
+          const primary = ordered[0];
+          const duplicates = ordered.slice(1);
+          const mergedSongIds = new Set(primary.songIds || []);
+
+          for (const duplicate of duplicates) {
+            (duplicate.songIds || []).forEach((id) => mergedSongIds.add(id));
+            const batch = writeBatch(db);
+            songs
+              .filter((song) => song.folderId === duplicate.id)
+              .forEach((song) => batch.update(doc(db, "songs", song.id), { folderId: primary.id }));
+            batch.delete(doc(db, "folders", duplicate.id));
+            batch.set(doc(db, "folders", primary.id), { songIds: [...mergedSongIds] }, { merge: true });
+            await batch.commit();
+          }
+
+          if (selectedFolderId && duplicates.some((folder) => folder.id === selectedFolderId)) {
+            setSelectedFolderId(primary.id);
+          }
+        }
+      } catch (error) {
+        console.error("Réparation des dossiers en double impossible", error);
+      } finally {
+        folderRepairRunningRef.current = false;
+      }
+    })();
+  }, [canEdit, folders, songs, selectedFolderId]);
+
   const selectedFolder = folders.find((folder) => folder.id === selectedFolderId);
   const visibleSongs = useMemo(() => {
     const normalized = search.trim().toLocaleLowerCase("fr");
@@ -547,7 +608,7 @@ export function SongsScreen({
       .filter((song) => {
         if (!selectedFolderId) return true;
         if (selectedFolder?.temporary) return (selectedFolder.songIds || []).includes(song.id);
-        return song.folderId === selectedFolderId;
+        return song.folderId === selectedFolderId || (selectedFolder?.songIds || []).includes(song.id);
       })
       .filter((song) => !selectedCategoryId || (song.categoryIds || []).includes(selectedCategoryId))
       .filter((song) => !normalized || `${song.titre} ${song.compositeur || ""}`.toLocaleLowerCase("fr").includes(normalized))
@@ -566,15 +627,92 @@ export function SongsScreen({
   async function addFolder() {
     const nom = newFolder.trim();
     if (!nom) return;
+    if (folders.some((folder) => !folder.temporary && normalizeFolderName(folder.nom) === normalizeFolderName(nom))) {
+      setNotice("Un dossier porte déjà ce nom.");
+      return;
+    }
     setBusy("folder");
     try {
-      await addDoc(collection(db, "folders"), { nom, temporary: false, createdAt: serverTimestamp() });
+      const ref = await addDoc(collection(db, "folders"), {
+        nom,
+        temporary: false,
+        eventId: "",
+        songIds: [],
+        categoryIds: [],
+        createdAt: serverTimestamp()
+      });
+      setSelectedFolderId(ref.id);
       setNewFolder("");
       setShowFolderForm(false);
       setNotice("Dossier ajouté.");
     } catch (error) {
       console.error(error);
       setNotice("Impossible d'ajouter le dossier.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function renameFolder() {
+    if (!folderToRename || folderToRename.temporary) return;
+    const nom = folderRenameValue.trim();
+    if (!nom) return;
+    if (folders.some((folder) =>
+      !folder.temporary &&
+      folder.id !== folderToRename.id &&
+      normalizeFolderName(folder.nom) === normalizeFolderName(nom)
+    )) {
+      setNotice("Un dossier porte déjà ce nom.");
+      return;
+    }
+
+    setBusy(`folder-rename-${folderToRename.id}`);
+    try {
+      await updateDoc(doc(db, "folders", folderToRename.id), { nom });
+      setFolderToRename(null);
+      setFolderRenameValue("");
+      setNotice("Dossier renommé.");
+    } catch (error) {
+      console.error(error);
+      setNotice("Impossible de renommer le dossier.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function duplicateFolder(folder: Folder) {
+    if (folder.temporary) return;
+    setBusy(`folder-copy-${folder.id}`);
+    try {
+      const usedNames = new Set(
+        folders.filter((item) => !item.temporary).map((item) => normalizeFolderName(item.nom))
+      );
+      const base = `${folder.nom.trim()} - copie`;
+      let nom = base;
+      let suffix = 2;
+      while (usedNames.has(normalizeFolderName(nom))) {
+        nom = `${base} ${suffix}`;
+        suffix += 1;
+      }
+
+      const linkedSongIds = [...new Set([
+        ...(folder.songIds || []),
+        ...songs.filter((song) => song.folderId === folder.id).map((song) => song.id)
+      ])];
+
+      const ref = await addDoc(collection(db, "folders"), {
+        nom,
+        temporary: false,
+        eventId: "",
+        songIds: linkedSongIds,
+        categoryIds: [],
+        createdAt: serverTimestamp()
+      });
+      setSelectedFolderId(ref.id);
+      setNotice(`Dossier dupliqué : ${nom}`);
+    } catch (error) {
+      console.error(error);
+      setNotice("Impossible de dupliquer le dossier.");
     } finally {
       setBusy("");
     }
@@ -796,9 +934,31 @@ export function SongsScreen({
           </select>
           {canEdit && <button className="library-mini-action" onClick={() => setShowFolderForm((value) => !value)}>+ Dossier</button>}
           {canEdit && selectedFolder && !selectedFolder.temporary && (
-            <button className="library-icon-danger" aria-label="Supprimer le dossier" disabled={busy === `folder-${selectedFolder.id}`} onClick={() => void removeFolder(selectedFolder)}>
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13" /></svg>
-            </button>
+            <>
+              <button
+                className="library-icon-action"
+                aria-label="Renommer le dossier"
+                title="Renommer"
+                onClick={() => {
+                  setFolderToRename(selectedFolder);
+                  setFolderRenameValue(selectedFolder.nom);
+                }}
+              >
+                ✎
+              </button>
+              <button
+                className="library-icon-action"
+                aria-label="Dupliquer le dossier"
+                title="Dupliquer"
+                disabled={busy === `folder-copy-${selectedFolder.id}`}
+                onClick={() => void duplicateFolder(selectedFolder)}
+              >
+                ⧉
+              </button>
+              <button className="library-icon-danger" aria-label="Supprimer le dossier" disabled={busy === `folder-${selectedFolder.id}`} onClick={() => void removeFolder(selectedFolder)}>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13" /></svg>
+              </button>
+            </>
           )}
         </div>
 
@@ -808,6 +968,37 @@ export function SongsScreen({
           <div className="inline-admin-form compact-inline-form">
             <input value={newFolder} onChange={(event) => setNewFolder(event.target.value)} placeholder="Nom du dossier" />
             <button disabled={busy === "folder" || !newFolder.trim()} onClick={() => void addFolder()}>Créer</button>
+          </div>
+        )}
+
+        {folderToRename && canEdit && (
+          <div className="modal-backdrop" onClick={() => setFolderToRename(null)}>
+            <div className="admin-modal compact-dialog" onClick={(event) => event.stopPropagation()}>
+              <div className="modal-title-row">
+                <h2>Renommer le dossier</h2>
+                <button onClick={() => setFolderToRename(null)}>×</button>
+              </div>
+              <input
+                value={folderRenameValue}
+                onChange={(event) => setFolderRenameValue(event.target.value)}
+                placeholder="Nom du dossier"
+                autoFocus
+              />
+              <div className="modal-actions">
+                <button onClick={() => setFolderToRename(null)}>Annuler</button>
+                <button
+                  className="primary"
+                  disabled={
+                    !folderRenameValue.trim() ||
+                    folderRenameValue.trim() === folderToRename.nom.trim() ||
+                    busy === `folder-rename-${folderToRename.id}`
+                  }
+                  onClick={() => void renameFolder()}
+                >
+                  Renommer
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
