@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { onAuthStateChanged, type User } from "firebase/auth";
 import {
   collection,
@@ -40,34 +40,61 @@ import { mergeSongCategories } from "./lib/songCategories";
 
 
 function LuminaStartupIntro({ onFinished }: { onFinished: () => void }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [needsSoundTap, setNeedsSoundTap] = useState(false);
+
   useEffect(() => {
-    const fallback = window.setTimeout(onFinished, 7000);
+    const fallback = window.setTimeout(onFinished, 9000);
     return () => window.clearTimeout(fallback);
   }, [onFinished]);
+
+  async function playWithSound(reset = false) {
+    const video = videoRef.current;
+    if (!video) return;
+
+    video.muted = false;
+    video.volume = 1;
+    if (reset) video.currentTime = 0;
+
+    try {
+      await video.play();
+      setNeedsSoundTap(false);
+    } catch {
+      // Les navigateurs mobiles peuvent bloquer l'autoplay avec son.
+      // Dans ce cas on demande une interaction utilisateur au lieu de lancer la vidéo muette.
+      setNeedsSoundTap(true);
+    }
+  }
 
   return (
     <div className="lumina-startup-intro" aria-label="Ouverture de Chœur Lumina">
       <video
+        ref={videoRef}
         className="lumina-startup-video"
-        src="/lumina-intro.mp4?v=2.9.5"
+        src="/lumina-intro.mp4?v=2.9.7"
         autoPlay
-        muted
         playsInline
         preload="auto"
         controls={false}
         disablePictureInPicture
-        onLoadedData={(event) => {
-          const video = event.currentTarget;
-          video.currentTime = 0;
-          void video.play().catch(() => undefined);
-        }}
-        onCanPlay={(event) => {
-          const video = event.currentTarget;
-          if (video.paused) void video.play().catch(() => undefined);
+        onLoadedData={() => { void playWithSound(true); }}
+        onCanPlay={() => {
+          if (videoRef.current?.paused) void playWithSound(false);
         }}
         onEnded={onFinished}
         onError={onFinished}
       />
+
+      {needsSoundTap && (
+        <button
+          type="button"
+          className="lumina-startup-sound-button"
+          onClick={() => { void playWithSound(true); }}
+        >
+          <span aria-hidden="true">♪</span>
+          Toucher pour démarrer avec le son
+        </button>
+      )}
     </div>
   );
 }
