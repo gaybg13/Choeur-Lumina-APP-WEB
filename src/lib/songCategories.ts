@@ -7,6 +7,7 @@ export const DEFAULT_SONG_CATEGORIES: SongCategory[] = [
   { id: "psaume", nom: "Psaume", ordre: 40, custom: false },
   { id: "acclamation", nom: "Acclamation", ordre: 50, custom: false },
   { id: "pu", nom: "P.U.", ordre: 60, custom: false },
+  { id: "offertoire", nom: "Offertoire", ordre: 65, custom: false },
   { id: "sanctus", nom: "Sanctus", ordre: 70, custom: false },
   { id: "anamnese", nom: "Anamnèse", ordre: 80, custom: false },
   { id: "agnus_dei", nom: "Agnus Dei", ordre: 90, custom: false },
@@ -16,9 +17,14 @@ export const DEFAULT_SONG_CATEGORIES: SongCategory[] = [
 ];
 
 export function mergeSongCategories(custom: SongCategory[]): SongCategory[] {
-  const customById = new Map(custom.filter((item) => item.id && item.nom).map((item) => [item.id, item]));
+  const defaultIds = new Set(DEFAULT_SONG_CATEGORIES.map((item) => item.id));
+  const customById = new Map(
+    custom
+      .filter((item) => item.id && item.nom && !defaultIds.has(item.id))
+      .map((item) => [item.id, item])
+  );
   return [
-    ...DEFAULT_SONG_CATEGORIES.filter((item) => !customById.has(item.id)),
+    ...DEFAULT_SONG_CATEGORIES,
     ...customById.values()
   ].sort((a, b) => a.ordre - b.ordre || a.nom.localeCompare(b.nom, "fr"));
 }

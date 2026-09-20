@@ -111,6 +111,7 @@ export function AgendaScreen({
   const [programme, setProgramme] = useState<ProgrammeDraft>({});
   const [programmeOrder, setProgrammeOrder] = useState<string[]>([]);
   const [customPartId, setCustomPartId] = useState("");
+  const [openProgrammeCategory, setOpenProgrammeCategory] = useState<string | null>(null);
   const [reportEvent, setReportEvent] = useState<LuminaEvent | null>(null);
   const [reportText, setReportText] = useState("");
   const [notice, setNotice] = useState("");
@@ -266,6 +267,7 @@ export function AgendaScreen({
     setProgramme(grouped);
     setProgrammeOrder([...defaultOrder, ...customOrder.filter((id) => categories.some((category) => category.id === id))]);
     setCustomPartId("");
+    setOpenProgrammeCategory(null);
   }
 
   async function saveProgramme() {
@@ -307,12 +309,6 @@ export function AgendaScreen({
     }
   }
 
-  function toggleProgrammeSong(categoryId: string, songId: string) {
-    setProgramme((current) => {
-      const ids = current[categoryId] || [];
-      return { ...current, [categoryId]: ids.includes(songId) ? ids.filter((id) => id !== songId) : [...ids, songId] };
-    });
-  }
 
   function addCustomPart() {
     if (!customPartId || programmeOrder.includes(customPartId)) return;
@@ -495,15 +491,98 @@ export function AgendaScreen({
       {programmeEvent && (
         <div className="modal-backdrop" onClick={() => setProgrammeEvent(null)}>
           <div className="admin-modal programme-modal category-programme-modal" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-title-row"><div><span className="section-kicker">PROGRAMME DE MESSE</span><h2>{programmeEvent.titre}</h2></div><button onClick={() => setProgrammeEvent(null)}>×</button></div>
-            <div className="category-programme-editor">
+            <div className="modal-title-row">
+              <div><span className="section-kicker">PROGRAMME DE MESSE</span><h2>{programmeEvent.titre}</h2></div>
+              <button onClick={() => setProgrammeEvent(null)}>×</button>
+            </div>
+
+            <p className="programme-helper">
+              Appuie sur une partie de la messe, choisis un chant puis la liste se referme automatiquement.
+            </p>
+
+            <div className="category-programme-editor compact-programme-editor">
               {programmeOrder.map((categoryId) => {
-                const categorySongs = songs.filter((song) => (song.categoryIds || []).includes(categoryId)).sort((a, b) => a.titre.localeCompare(b.titre, "fr"));
+                const categorySongs = songs
+                  .filter((song) => (song.categoryIds || []).includes(categoryId))
+                  .sort((a, b) => a.titre.localeCompare(b.titre, "fr"));
                 const isCustomPart = !defaultOrder.includes(categoryId);
+                const selectedIds = programme[categoryId] || [];
+                const selectedSongs = selectedIds
+                  .map((id) => songMap.get(id))
+                  .filter((song): song is Song => Boolean(song));
+                const isOpen = openProgrammeCategory === categoryId;
+
                 return (
-                  <section key={categoryId} className="programme-category-section">
-                    <div className="programme-category-head"><h3>{categoryLabel(categoryId, categories)}</h3>{isCustomPart && <button onClick={() => { setProgrammeOrder((current) => current.filter((id) => id !== categoryId)); setProgramme((current) => { const next = { ...current }; delete next[categoryId]; return next; }); }}>Retirer</button>}</div>
-                    {categorySongs.length === 0 ? <p>Aucun chant dans cette catégorie.</p> : <div className="programme-song-choice-list">{categorySongs.map((song) => <label key={song.id}><input type="checkbox" checked={(programme[categoryId] || []).includes(song.id)} onChange={() => toggleProgrammeSong(categoryId, song.id)} /><span>{song.titre}</span></label>)}</div>}
+                  <section key={categoryId} className={`programme-category-section programme-picker-section${isOpen ? " open" : ""}`}>
+                    <div className="programme-picker-head">
+                      <button
+                        type="button"
+                        className="programme-picker-toggle"
+                        onClick={() => setOpenProgrammeCategory(isOpen ? null : categoryId)}
+                      >
+                        <span>
+                          <strong>{categoryLabel(categoryId, categories)}</strong>
+                          <small>
+                            {selectedSongs.length
+                              ? selectedSongs.map((song) => song.titre).join(" · ")
+                              : categorySongs.length
+                                ? "Choisir un chant"
+                                : "Aucun chant disponible"}
+                          </small>
+                        </span>
+                        <span className="programme-picker-chevron" aria-hidden="true">{isOpen ? "⌃" : "⌄"}</span>
+                      </button>
+
+                      {isCustomPart && (
+                        <button
+                          type="button"
+                          className="programme-part-remove"
+                          onClick={() => {
+                            setProgrammeOrder((current) => current.filter((id) => id !== categoryId));
+                            setProgramme((current) => {
+                              const next = { ...current };
+                              delete next[categoryId];
+                              return next;
+                            });
+                            if (openProgrammeCategory === categoryId) setOpenProgrammeCategory(null);
+                          }}
+                        >
+                          Retirer
+                        </button>
+                      )}
+                    </div>
+
+                    {isOpen && (
+                      <div className="programme-song-picker-list">
+                        {categorySongs.length === 0 ? (
+                          <p>Aucun chant n'est encore classé dans cette catégorie.</p>
+                        ) : (
+                          categorySongs.map((song) => {
+                            const selected = selectedIds.includes(song.id);
+                            return (
+                              <button
+                                type="button"
+                                key={song.id}
+                                className={selected ? "selected" : ""}
+                                onClick={() => {
+                                  setProgramme((current) => ({
+                                    ...current,
+                                    [categoryId]: selected ? [] : [song.id]
+                                  }));
+                                  setOpenProgrammeCategory(null);
+                                }}
+                              >
+                                <span className="programme-choice-mark">{selected ? "✓" : ""}</span>
+                                <span className="programme-choice-copy">
+                                  <strong>{song.titre}</strong>
+                                  {song.compositeur && <small>{song.compositeur}</small>}
+                                </span>
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
                   </section>
                 );
               })}
@@ -511,12 +590,18 @@ export function AgendaScreen({
               <div className="add-mass-part-row">
                 <select value={customPartId} onChange={(event) => setCustomPartId(event.target.value)}>
                   <option value="">Ajouter une partie de la messe…</option>
-                  {categories.filter((category) => category.custom && !programmeOrder.includes(category.id)).map((category) => <option key={category.id} value={category.id}>{category.nom}</option>)}
+                  {categories
+                    .filter((category) => category.custom && !programmeOrder.includes(category.id))
+                    .map((category) => <option key={category.id} value={category.id}>{category.nom}</option>)}
                 </select>
                 <button disabled={!customPartId} onClick={addCustomPart}>Ajouter</button>
               </div>
             </div>
-            <div className="modal-actions"><button onClick={() => setProgrammeEvent(null)}>Annuler</button><button className="primary" disabled={busy === "programme"} onClick={() => void saveProgramme()}>Enregistrer</button></div>
+
+            <div className="modal-actions">
+              <button onClick={() => setProgrammeEvent(null)}>Annuler</button>
+              <button className="primary" disabled={busy === "programme"} onClick={() => void saveProgramme()}>Enregistrer</button>
+            </div>
           </div>
         </div>
       )}
