@@ -557,11 +557,12 @@ export function SongsScreen({
     if (!canEdit || folderRepairRunningRef.current) return;
 
     const permanent = folders.filter((folder) => !folder.temporary);
-    const duplicateGroups = [...new Map(
-      permanent.map((folder) => [normalizeFolderName(folder.nom), [] as Folder[]])
-    ).keys()]
-      .map((key) => permanent.filter((folder) => normalizeFolderName(folder.nom) === key))
-      .filter((group) => group.length > 1);
+    const groupedFolders = new Map<string, Folder[]>();
+    for (const folder of permanent) {
+      const key = normalizeFolderName(folder.nom);
+      groupedFolders.set(key, [...(groupedFolders.get(key) || []), folder]);
+    }
+    const duplicateGroups = [...groupedFolders.values()].filter((group) => group.length > 1);
 
     if (!duplicateGroups.length) return;
 
