@@ -41,28 +41,66 @@ import { mergeSongCategories } from "./lib/songCategories";
 
 function LuminaStartupIntro({ onFinished }: { onFinished: () => void }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const [needsSoundTap, setNeedsSoundTap] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(false);
+  const [playbackBlocked, setPlaybackBlocked] = useState(false);
 
   useEffect(() => {
-    const fallback = window.setTimeout(onFinished, 9000);
+    const fallback = window.setTimeout(onFinished, 12_000);
     return () => window.clearTimeout(fallback);
   }, [onFinished]);
 
-  async function playWithSound(reset = false) {
+  async function ensurePlayback() {
     const video = videoRef.current;
     if (!video) return;
 
+    // Le Web exige souvent que l'autoplay commence muet.
+    // On garantit donc d'abord la lecture de la vidéo, puis l'utilisateur
+    // peut activer le son sans interrompre l'introduction.
+    video.muted = !soundEnabled;
+    try {
+      await video.play();
+      setPlaybackBlocked(false);
+    } catch {
+      setPlaybackBlocked(true);
+    }
+  }
+
+  async function enableSound() {
+    const video = videoRef.current;
+    if (!video) return;
+
+    setSoundEnabled(true);
     video.muted = false;
     video.volume = 1;
-    if (reset) video.currentTime = 0;
 
     try {
       await video.play();
-      setNeedsSoundTap(false);
+      setPlaybackBlocked(false);
     } catch {
-      // Les navigateurs mobiles peuvent bloquer l'autoplay avec son.
-      // Dans ce cas on demande une interaction utilisateur au lieu de lancer la vidéo muette.
-      setNeedsSoundTap(true);
+      // Si le navigateur bloque encore, on remet la vidéo en mode muet
+      // pour ne jamais bloquer l'ouverture de Lumina.
+      setSoundEnabled(false);
+      video.muted = true;
+      try {
+        await video.play();
+        setPlaybackBlocked(false);
+      } catch {
+        setPlaybackBlocked(true);
+      }
+    }
+  }
+
+  async function startMutedFromBeginning() {
+    const video = videoRef.current;
+    if (!video) return;
+    video.currentTime = 0;
+    video.muted = true;
+    setSoundEnabled(false);
+    try {
+      await video.play();
+      setPlaybackBlocked(false);
+    } catch {
+      setPlaybackBlocked(true);
     }
   }
 
@@ -71,28 +109,40 @@ function LuminaStartupIntro({ onFinished }: { onFinished: () => void }) {
       <video
         ref={videoRef}
         className="lumina-startup-video"
-        src="/lumina-intro.mp4?v=2.9.7"
+        src="/lumina-intro.mp4?v=2.9.8"
         autoPlay
+        muted={!soundEnabled}
         playsInline
         preload="auto"
         controls={false}
         disablePictureInPicture
-        onLoadedData={() => { void playWithSound(true); }}
+        onLoadedData={() => { void ensurePlayback(); }}
         onCanPlay={() => {
-          if (videoRef.current?.paused) void playWithSound(false);
+          if (videoRef.current?.paused) void ensurePlayback();
         }}
         onEnded={onFinished}
         onError={onFinished}
       />
 
-      {needsSoundTap && (
+      {!playbackBlocked && !soundEnabled && (
         <button
           type="button"
           className="lumina-startup-sound-button"
-          onClick={() => { void playWithSound(true); }}
+          onClick={() => { void enableSound(); }}
         >
           <span aria-hidden="true">♪</span>
-          Toucher pour démarrer avec le son
+          Activer le son
+        </button>
+      )}
+
+      {playbackBlocked && (
+        <button
+          type="button"
+          className="lumina-startup-sound-button"
+          onClick={() => { void startMutedFromBeginning(); }}
+        >
+          <span aria-hidden="true">▶</span>
+          Démarrer la vidéo
         </button>
       )}
     </div>
@@ -188,7 +238,7 @@ export default function App() {
   const [calendarDayKey, setCalendarDayKey] = useState(() => parisDayKey());
   const [showStartupIntro, setShowStartupIntro] = useState(() => {
     try {
-      const key = "lumina-startup-intro-v2";
+      const key = "lumina-startup-intro-v3";
       const shouldPlay = sessionStorage.getItem(key) !== "shown";
       if (shouldPlay) sessionStorage.setItem(key, "shown");
       return shouldPlay;
