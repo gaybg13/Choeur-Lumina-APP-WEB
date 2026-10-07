@@ -192,6 +192,23 @@ async function readCachedSongAudio(url: string): Promise<Blob | null> {
   });
 }
 
+async function deleteCachedSongAudio(url: string) {
+  const db = await openSongAudioCache();
+  if (!db) return;
+
+  await new Promise<void>((resolve) => {
+    try {
+      const tx = db.transaction(SONG_AUDIO_CACHE_STORE, "readwrite");
+      tx.objectStore(SONG_AUDIO_CACHE_STORE).delete(url);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+      tx.onabort = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
+}
+
 async function trimSongAudioCache(db: IDBDatabase) {
   try {
     const count = await new Promise<number>((resolve) => {
@@ -325,6 +342,7 @@ function SongVoicePlayer({ src, label }: { src: string; label: string }) {
       }
       activeSongVoiceElement = audio;
       setPlaying(true);
+      setFailed(false);
     };
 
     const onPause = () => setPlaying(false);
@@ -337,6 +355,14 @@ function SongVoicePlayer({ src, label }: { src: string; label: string }) {
     };
 
     const onError = () => {
+      // Un blob local devenu invalide ne doit pas condamner le lecteur :
+      // startFromUserAction() retentera automatiquement avec l'URL Firebase.
+      const localUrl = localObjectUrlRef.current;
+      if (localUrl && (audio.currentSrc === localUrl || audio.src === localUrl)) {
+        setPlaying(false);
+        return;
+      }
+
       setFailed(true);
       setPlaying(false);
       if (activeSongVoiceElement === audio) activeSongVoiceElement = null;
@@ -350,8 +376,8 @@ function SongVoicePlayer({ src, label }: { src: string; label: string }) {
     audio.addEventListener("ended", onEnded);
     audio.addEventListener("error", onError);
 
-    // WhatsApp-like : si cet audio a déjà été écouté, on récupère sa copie
-    // locale dès l'ouverture de la fiche. Aucun son ne démarre automatiquement.
+    // Si une copie locale existe déjà, on la prépare. Si elle est corrompue
+    // ou illisible, la première tentative retombera automatiquement sur Firebase.
     void readCachedSongAudio(src).then((blob) => {
       if (cancelled || userStartedRef.current || !blob || !audioRef.current) return;
 
@@ -359,7 +385,6 @@ function SongVoicePlayer({ src, label }: { src: string; label: string }) {
       localObjectUrlRef.current = objectUrl;
       audio.src = objectUrl;
       audio.preload = "metadata";
-      audio.load();
       setActivated(true);
       setCached(true);
     });
@@ -385,34 +410,69 @@ function SongVoicePlayer({ src, label }: { src: string; label: string }) {
     };
   }, [src]);
 
-  function startFromUserAction() {
+  async function playRemoteSource(audio: HTMLAudioElement) {
+    const localUrl = localObjectUrlRef.current;
+    if (localUrl) {
+      URL.revokeObjectURL(localUrl);
+      localObjectUrlRef.current = null;
+      setCached(false);
+      await deleteCachedSongAudio(src);
+    }
+
+    setActivated(true);
+    setFailed(false);
+    setPosition(0);
+    setDuration(0);
+
+    // Affecter src suffit à démarrer le chargement. On évite audio.load() ici :
+    // sur Chrome/Android/PWA il peut interrompre le play() issu du même clic.
+    audio.src = src;
+    audio.preload = "auto";
+    audio.playbackRate = speed;
+    await audio.play();
+  }
+
+  async function startFromUserAction() {
     const audio = audioRef.current;
     if (!audio) return;
 
     userStartedRef.current = true;
+    setFailed(false);
 
-    if (!activated || failed || !audio.getAttribute("src")) {
-      setActivated(true);
-      setFailed(false);
-      setPosition(0);
-      setDuration(0);
-      audio.src = src;
-      audio.preload = "metadata";
-      audio.load();
+    try {
+      if (!audio.getAttribute("src")) {
+        await playRemoteSource(audio);
+      } else {
+        audio.playbackRate = speed;
+        await audio.play();
+      }
+    } catch (firstError) {
+      const localUrl = localObjectUrlRef.current;
+      const wasTryingLocal = Boolean(localUrl && (audio.currentSrc === localUrl || audio.src === localUrl));
+
+      if (wasTryingLocal) {
+        try {
+          await playRemoteSource(audio);
+        } catch (remoteError) {
+          console.error("Lecture audio Lumina impossible", remoteError);
+          setFailed(true);
+          setPlaying(false);
+          return;
+        }
+      } else {
+        console.error("Lecture audio Lumina impossible", firstError);
+        setFailed(true);
+        setPlaying(false);
+        return;
+      }
     }
 
-    // La première lecture part tout de suite en streaming. En parallèle seulement,
-    // on sauvegarde le fichier pour rendre les lectures suivantes quasi instantanées.
+    // Le cache ne doit jamais bloquer le premier démarrage. Il est rempli
+    // uniquement en arrière-plan après que la lecture distante a pu être lancée.
     if (!cached && !cacheStartedRef.current) {
       cacheStartedRef.current = true;
       void cacheSongAudioInBackground(src).then(() => setCached(true));
     }
-
-    audio.playbackRate = speed;
-    void audio.play().catch(() => {
-      setFailed(true);
-      setPlaying(false);
-    });
   }
 
   function togglePlayback() {
@@ -420,7 +480,7 @@ function SongVoicePlayer({ src, label }: { src: string; label: string }) {
     if (!audio) return;
 
     if (!activated || failed || audio.paused) {
-      startFromUserAction();
+      void startFromUserAction();
     } else {
       audio.pause();
     }
